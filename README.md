@@ -1,48 +1,51 @@
 # PrefabsUploader
 
-Plugin Hytale que permite jogadores **enviarem seus prefabs locais para o servidor**, onde viram
-*server prefabs* colocáveis no mundo — com **revisão da staff** antes de qualquer coisa tocar o disco.
+**English** | [Português](README.pt-BR.md)
 
-## Como funciona
-1. O jogador exporta um prefab no Asset Editor (`.prefab.json`) e envia pelo **bot do Discord** do servidor.
-2. O hub guarda só um **ponteiro** pro anexo (o arquivo continua hospedado no Discord) e o coloca numa **fila de revisão**.
-3. A staff abre `/prefabs-uploader validate` in-game: lista os pendentes, **baixa sob demanda** e vê o **preview 3D** — tudo **em memória**.
-4. Só quando a staff **aprova** o prefab é gravado no storage de server prefabs do mundo. Rejeitar não grava nada.
+A Hytale plugin that lets players **upload their local prefabs to the server**, where they become
+placeable *server prefabs* — with **staff review** before anything touches disk.
 
-Toda a validação de segurança (limite de tamanho/contagem, rejeição de entidades, validação nativa do
-engine, namespacing por dono) roda **antes** da gravação. Ver `docs/DESIGN.md`.
+## How it works
+1. The player exports a prefab from the Asset Editor (`.prefab.json`) and sends it through the server's **Discord bot**.
+2. The hub keeps only a **pointer** to the attachment (the file stays hosted on Discord) and adds it to a **review queue**.
+3. Staff open `/prefabs-uploader validate` in-game: list the pending items, **download on demand** and see a **3D preview** — all **in memory**.
+4. The prefab is written to the world's server-prefab storage **only when staff approve it**. Rejecting writes nothing.
+
+All security validation (size/count limits, entity rejection, the engine's native validation,
+per-owner namespacing) runs **before** the write. See `docs/DESIGN.md`.
 
 ## Build
 ```bash
-./gradlew compileJava   # checa compilação
-./gradlew jar           # gera o fat JAR do plugin (shadow)
+./gradlew compileJava   # check compilation
+./gradlew jar           # build the plugin fat JAR (shadow)
 ```
-O JAR sai em `build/libs/`. Pra testar, copie pra pasta `mods/` de uma instância de Hytale server e
-reinicie (Hytale não tem hot-reload). Na primeira execução o plugin gera
-`mods/ProjectAtlasia_PrefabsUploader/config.properties` — **aponte `hub.address` pro seu hub** ali
-(o default é `localhost:50051` pra teste local).
+The JAR lands in `build/libs/`. To test, copy it into the `mods/` folder of a Hytale server instance
+and restart (Hytale has no hot-reload). On first run the plugin generates
+`mods/ProjectAtlasia_PrefabsUploader/config.properties` — **point `hub.address` at your hub** there
+(the default is `localhost:50051` for local testing).
 
-**Pré-requisitos:** JDK **25+** (exigência do toolchain do ScaffoldIt). A **primeira** build precisa de
-rede pra resolver o plugin Gradle `dev.scaffoldit` e o **SDK Hytale** (`release 0.5.2`) na HytaleMaven;
-builds seguintes usam o cache do Gradle.
+**Requirements:** JDK **25+** (required by the ScaffoldIt toolchain). The **first** build needs network
+access to resolve the `dev.scaffoldit` Gradle plugin and the **Hytale SDK** (`release 0.5.2`) from
+HytaleMaven; later builds use the Gradle cache.
 
 ## Stack
-- SDK Hytale `release 0.5.2` via ScaffoldIt (`dev.scaffoldit`).
-- Java + gRPC (cliente). Gradle 9.2 (wrapper incluso).
+- Hytale SDK `release 0.5.2` via ScaffoldIt (`dev.scaffoldit`).
+- Java + gRPC (client). Gradle 9.2 (wrapper included).
 - Manifest: `ProjectAtlasia:PrefabsUploader` → permission nodes `projectatlasia.prefabsuploader.command.*`.
 
-## Licença
-Copyright (C) 2026 **ProjectAtlasia** — autor: astahjmo (Astaroth).
+## License
+Copyright (C) 2026 **ProjectAtlasia** — author: astahjmo (Astaroth).
 
-Este plugin é software livre licenciado sob a **GNU General Public License v3.0 (GPL-3.0-only)** — ver
-[`LICENSE`](LICENSE). Você pode usar, estudar, modificar e redistribuir (inclusive comercialmente),
-desde que **mantenha os avisos de copyright** e qualquer trabalho derivado **continue sob a GPLv3**
-(forks fechados não são permitidos). O contrato gRPC (`proto/prefabsuploader.proto`) é distribuído
-junto, sob a mesma licença.
+This plugin is free software licensed under the **GNU General Public License v3.0 (GPL-3.0-only)** —
+see [`LICENSE`](LICENSE). You may use, study, modify and redistribute it (including commercially), as
+long as you **keep the copyright notices** and any derivative work **stays under the GPLv3** (closed
+forks are not allowed). The gRPC contract (`proto/prefabsuploader.proto`) ships with it under the same
+license.
 
-Atribuições das bibliotecas de terceiros embaladas no JAR (gRPC, Netty, protobuf-java, Guava) estão em
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). O plugin **linka em runtime** contra o **SDK Hytale**
-(`com.hypixel.hytale:*`), proprietário e provido pelo servidor — não é redistribuído neste repositório.
+Attributions for the third-party libraries bundled in the JAR (gRPC, Netty, protobuf-java, Guava) are
+in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). The plugin **links at runtime** against the
+**Hytale SDK** (`com.hypixel.hytale:*`), which is proprietary and provided by the server — it is not
+redistributed in this repository.
 
-> O **bot/hub** do Discord é um componente **privado e proprietário** (All Rights Reserved), em
-> repositório separado — **não** faz parte desta licença.
+> The Discord **bot/hub** is a **private, proprietary** component (All Rights Reserved) in a separate
+> repository — it is **not** covered by this license.
