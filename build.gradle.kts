@@ -82,26 +82,21 @@ sourceSets {
 // -PhubDefault=host:port -PhubTlsDefault=true; the committed source stays generic (localhost).
 val hubDefault = (findProperty("hubDefault") as String?) ?: "localhost:50051"
 val hubTlsDefault = (findProperty("hubTlsDefault") as String?)?.toBoolean() ?: false
-val generatedSrcDir = layout.buildDirectory.dir("generated/sources/builddefaults")
-val generateBuildDefaults by tasks.registering {
+// Gera um RECURSO (não uma classe) lido pelo PluginConfig em runtime. Assim o .java compila sozinho
+// na IDE (sem depender de código gerado) e o build oficial ainda injeta o hub de produção.
+val generatedResDir = layout.buildDirectory.dir("generated/resources/builddefaults")
+val generateBuildResource by tasks.registering {
     inputs.property("hubDefault", hubDefault)
     inputs.property("hubTlsDefault", hubTlsDefault)
-    outputs.dir(generatedSrcDir)
+    outputs.dir(generatedResDir)
     doLast {
-        val pkg = generatedSrcDir.get().dir("dev/atlasia/prefabuploader/config").asFile
-        pkg.mkdirs()
-        pkg.resolve("BuildDefaults.java").writeText(
-            "package dev.atlasia.prefabuploader.config;\n\n" +
-                "final class BuildDefaults {\n" +
-                "  static final String HUB_ADDRESS = \"$hubDefault\";\n" +
-                "  static final boolean HUB_TLS = $hubTlsDefault;\n\n" +
-                "  private BuildDefaults() {}\n" +
-                "}\n",
-        )
+        val f = generatedResDir.get().file("prefabsuploader-build.properties").asFile
+        f.parentFile.mkdirs()
+        f.writeText("hub.default=$hubDefault\nhub.tls=$hubTlsDefault\n")
     }
 }
-sourceSets.named("main") { java.srcDir(generatedSrcDir) }
-tasks.named("compileJava") { dependsOn(generateBuildDefaults) }
+sourceSets.named("main") { resources.srcDir(generateBuildResource) }
+tasks.named("processResources") { dependsOn(generateBuildResource) }
 
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:$protobufVersion" }
