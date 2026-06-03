@@ -1,22 +1,8 @@
-/**
- * Build for the PrefabsUploader plugin. Most of the Hytale wiring lives in `settings.gradle.kts`
- * (the `hytale { }` block handled by ScaffoldIt). This file adds: protobuf/gRPC codegen, the gRPC
- * client deps, and a SHADOW jar that relocates protobuf+guava to avoid clashing with the copies the
- * HytaleServer.jar already loads on the classpath.
- *
- * Classpath facts (verified against Server-0.5.2.jar):
- *   - io.grpc            → ABSENT  → we must bundle grpc-java.
- *   - com.google.protobuf→ PRESENT (757 cls) → relocate OURS to avoid a version clash.
- *   - io.netty           → PRESENT → do NOT reuse; use grpc-netty-shaded (already relocated).
- *   - com.google.common  → PRESENT (partial) → relocate OURS.
- */
-
 plugins {
     eclipse
     id("com.diffplug.spotless") version "7.0.4"
     id("com.google.protobuf") version "0.9.4"
-    // Shadow 9.x bundla ASM moderno (lê bytecode Java 25/major 69). Versões 8.x quebram aqui
-    // porque o devtools do ScaffoldIt exige JVM 25+, então não dá pra baixar o target pra 21.
+    // Shadow 9.x ships ASM that reads Java 25 bytecode (major 69); 8.x fails here.
     id("com.gradleup.shadow") version "9.4.2"
 }
 
@@ -25,8 +11,7 @@ val protobufVersion = "4.29.3"
 
 spotless {
     java {
-        target("src/**/*.java") // generated proto/grpc sources are under build/ and left untouched
-        // Cabeçalho GPLv3 (SPDX) inserido/forçado em todo .java. spotlessApply adiciona; spotlessCheck cobra.
+        target("src/**/*.java")
         licenseHeader(
             """
             /*
@@ -58,29 +43,22 @@ spotless {
 }
 
 repositories {
-    // Any external repositories besides: MavenLocal, MavenCentral, HytaleMaven, and CurseMaven
 }
 
 dependencies {
     compileOnly("org.projectlombok:lombok:1.18.46")
     annotationProcessor("org.projectlombok:lombok:1.18.46")
 
-    // gRPC client (bundled into the shadow jar).
     implementation("io.grpc:grpc-protobuf:$grpcVersion")
     implementation("io.grpc:grpc-stub:$grpcVersion")
-    // implementation (não runtimeOnly): referenciamos NettyChannelBuilder em tempo de compilação
-    // pra construir o canal por endereço direto (contorna o NameResolver no fat jar).
+    // implementation (not runtimeOnly): NettyChannelBuilder is referenced at compile time.
     implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
-    // Needed by grpc-generated stubs (javax.annotation.Generated) on JDK 9+.
     compileOnly("org.apache.tomcat:annotations-api:6.0.53")
 
-    // Drop any extra jars (e.g. an HTTP lib) into ./libs and they'll be on the compile classpath.
     compileOnly(fileTree("libs") { include("*.jar") })
 }
 
-// Contrato gRPC vendorado em ./proto (GPLv3, distribuído junto do plugin). generateProto compila
-// os stubs Java a partir dele — o repo builda offline, sem depender de nenhum repo externo.
 sourceSets {
     main {
         proto { srcDir("proto") }
@@ -111,20 +89,18 @@ tasks.named<JavaExec>("runServer") {
 }
 
 tasks.shadowJar {
-    archiveClassifier.set("") // o fat jar É o artefato de deploy (manifest.json entra via main output)
+    archiveClassifier.set("")
 
-    // NÃO empacotar o que o servidor já provê em runtime (Server traz netty/protobuf/guava/bson
-    // shadeados dentro dele; bundlá-lo gera jar de 118MB e quebra o ASM do shadow com major 69).
     dependencies {
         exclude(dependency("com.hypixel.hytale:.*:.*"))
         exclude(dependency("dev.scaffoldit:.*:.*"))
         exclude(dependency("org.projectlombok:.*:.*"))
     }
 
-    // io.grpc NÃO é relocado (ausente no server). Só protobuf/guava (presentes → conflitariam).
+    // Relocate protobuf/guava because the server already ships them and would conflict; io.grpc is absent there, so it is left as-is.
     relocate("com.google.protobuf", "dev.atlasia.prefabuploader.shaded.protobuf")
     relocate("com.google.common", "dev.atlasia.prefabuploader.shaded.guava")
-    mergeServiceFiles() // preserva os META-INF/services (provider do grpc-netty-shaded)
+    mergeServiceFiles()
 }
 
 tasks.named("build") {

@@ -22,10 +22,7 @@ import com.hypixel.hytale.server.core.command.system.basecommands.AbstractComman
 import dev.atlasia.prefabuploader.client.HubClient;
 import javax.annotation.Nonnull;
 
-/**
- * Comando raiz {@code /prefabs-uploader}. Aceita os aliases {@code prefabsuploader} e {@code pu}.
- * Autor: astahjmo (Astaroth).
- */
+/** Root command {@code /prefabs-uploader}, with aliases {@code prefabsuploader} and {@code pu}. */
 public class PrefabsUploaderCommand extends AbstractCommandCollection {
 
   public PrefabsUploaderCommand(@Nonnull HubClient client) {

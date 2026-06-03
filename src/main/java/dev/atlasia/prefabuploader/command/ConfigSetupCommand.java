@@ -30,8 +30,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * {@code /prefabs-uploader config setup} — pede um código de pareamento ao hub e mostra ao admin as
- * instruções pra digitar no Discord. Gated por permissão (admin). Autor: astahjmo (Astaroth).
+ * {@code /prefabs-uploader config setup} — requests a pairing code from the hub and shows the admin
+ * the instructions to enter on Discord. Permission-gated (admin).
  */
 public class ConfigSetupCommand extends AbstractCommand {
 

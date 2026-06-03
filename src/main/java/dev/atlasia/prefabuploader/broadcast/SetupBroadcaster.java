@@ -25,9 +25,8 @@ import dev.atlasia.prefabuploader.client.HubClient;
 import java.util.logging.Level;
 
 /**
- * Enquanto o servidor NÃO estiver pareado, avisa os jogadores a cada minuto que é preciso
- * configurar a integração com o Discord, com o link de instalação do bot. Para sozinho quando
- * configura. Autor: astahjmo (Astaroth).
+ * While the server is not yet paired, periodically warns online players that the Discord
+ * integration must be configured, including the bot install link. Stops once configured.
  */
 public final class SetupBroadcaster {
 
@@ -60,7 +59,7 @@ public final class SetupBroadcaster {
                     break;
                   }
                   if (client.isConfigured()) {
-                    continue; // já pareado → silêncio (mas mantém a thread viva caso desconecte)
+                    continue;
                   }
                   if (Universe.get().getPlayerCount() == 0) {
                     continue;

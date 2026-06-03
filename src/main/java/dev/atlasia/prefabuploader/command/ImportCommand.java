@@ -31,9 +31,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * {@code /prefabs-uploader import} — fluxo de envio de prefab por jogador. Pede ao hub: se a conta
- * não está vinculada, mostra o código de vínculo; se está, o hub abre uma thread privada no
- * Discord. Autor: astahjmo (Astaroth).
+ * {@code /prefabs-uploader import} — per-player prefab upload flow. Asks the hub: if the account is
+ * not linked, shows the link code; if it is, the hub opens a private Discord thread.
  */
 public class ImportCommand extends AbstractCommand {
 
@@ -59,7 +58,6 @@ public class ImportCommand extends AbstractCommand {
     PlayerRef sender = context.senderAs(PlayerRef.class);
     String uuid = sender.getUuid().toString();
     String username = sender.getUsername();
-    // Cacheia uuid->username (pra mostrar o nome in-game do autor no /pu validate, mesmo offline).
     dev.atlasia.prefabuploader.prefab.PlayerNameCache.get().put(uuid, username);
 
     return CompletableFuture.runAsync(
@@ -71,8 +69,6 @@ public class ImportCommand extends AbstractCommand {
               case THREAD_OPENED ->
                   context.sendMessage(
                       tagged(Message.translation("server.prefabsuploader.import.threadOpened")));
-              // Mensagem dinâmica vinda do hub (nack/erro do bot): não é i18n in-game, fica como
-              // veio.
               default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
             }
           } catch (Throwable t) {

@@ -62,18 +62,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 
 /**
- * Cliente gRPC do plugin: mantém o stream bidirecional {@code Connect} com o hub
- * (config/heartbeat), reconectando com backoff, e expõe os RPCs unários ({@code RequestSetup},
- * {@code PlayerImport} e — no modelo PULL — {@code ListPending}/{@code GetPending}/{@code
- * ResolvePending}) além do download direto do CDN do Discord. O hub NÃO empurra mais prefabs (não
- * há case {@code PrefabPush}). Autor: astahjmo (Astaroth).
+ * gRPC client for the plugin: maintains the bidirectional {@code Connect} stream with the hub
+ * (config/heartbeat) and reconnects with backoff, exposes the unary RPCs ({@code RequestSetup},
+ * {@code PlayerImport}, {@code ListPending}/{@code GetPending}/{@code ResolvePending}), and
+ * downloads directly from the Discord CDN.
  */
 public final class HubClient {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long MAX_MSG = 16L << 20;
 
-  // [PULL] Download do CDN: timeout e teto de corpo (espelha PrefabValidator.MAX_BYTES = 8 MiB).
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
   private static final int CDN_MAX_BYTES =
       dev.atlasia.prefabuploader.prefab.PrefabValidator.MAX_BYTES;
@@ -81,14 +79,10 @@ public final class HubClient {
   private static final long BACKOFF_MIN_SEC = 2;
   private static final long BACKOFF_MAX_SEC = 60;
 
-  // [P1] Espera o servidor autenticar no Hytale (ServerAuthManager) antes da 1ª conexão — evita a
-  // corrida de boot em que o identity token ainda não está pronto e o hub recusa. Após o limite,
-  // conecta mesmo assim (o hub decide; se o servidor estiver em modo offline, recusa e loga).
   private static final long AUTH_POLL_SEC = 2;
   private static final long MAX_AUTH_WAIT_SEC = 60;
   private long authWaitedSec = 0;
 
-  // [H7] Header onde o identity token do servidor Hytale viaja em toda RPC pro hub validar.
   private static final Metadata.Key<String> AUTHORIZATION =
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
 
@@ -103,9 +97,6 @@ public final class HubClient {
             return t;
           });
 
-  // [PULL] Executor de I/O (RPCs bloqueantes + download HTTP do CDN). Vive aqui pra ser reusado
-  // pela UI de validação (que NUNCA pode bloquear a thread do mundo). Daemon, single-thread (o
-  // fluxo da staff é serial: lista → clica → baixa → aprova/rejeita).
   private final ExecutorService ioExecutor =
       Executors.newSingleThreadExecutor(
           r -> {
@@ -114,19 +105,14 @@ public final class HubClient {
             return t;
           });
 
-  // Cliente HTTP do download do CDN (lazy: só monta no 1º download, fora da thread do mundo).
   private volatile HttpClient httpClient;
 
-  // Observer de saída do stream atual. Send NÃO é concorrente → sincronizar nele.
   private final AtomicReference<StreamObserver<PluginMessage>> outbound = new AtomicReference<>();
   private final Object sendLock = new Object();
 
   private volatile boolean running = false;
   private volatile long backoffSec = BACKOFF_MIN_SEC;
 
-  // Estado de config como snapshot ATÔMICO e imutável: leitura consistente do par
-  // (configured, inviteUrl). Antes eram dois volatiles independentes → o broadcaster
-  // podia ler um par inconsistente (configured novo + inviteUrl velha, ou vice-versa).
   private final AtomicReference<HubState> state = new AtomicReference<>(new HubState(false, ""));
 
   private record HubState(boolean configured, String inviteUrl) {}
@@ -136,8 +122,8 @@ public final class HubClient {
   }
 
   /**
-   * Executor de I/O do cliente (RPCs bloqueantes + download do CDN). A UI de validação usa este
-   * pool pra NUNCA bloquear a thread do mundo. Daemon — não segura o shutdown da JVM.
+   * Returns the client's I/O executor (blocking RPCs + CDN downloads), used to avoid blocking the
+   * world thread. The pool uses daemon threads.
    */
   public ExecutorService io() {
     return ioExecutor;
@@ -151,16 +137,10 @@ public final class HubClient {
     try {
       String[] hostPort = parseAddress(config.hubAddress());
       InetSocketAddress address = new InetSocketAddress(hostPort[0], Integer.parseInt(hostPort[1]));
-      // forAddress(SocketAddress) usa endereço DIRETO — não passa pelo NameResolver via
-      // ServiceLoader. No fat jar shadeado só o resolver 'unix' (UdsNameResolverProvider)
-      // sobrevive ao merge, então 'localhost:50051' era resolvido como unix socket e o
-      // transporte netty rejeitava. Endereço direto contorna isso por completo.
       NettyChannelBuilder builder =
           NettyChannelBuilder.forAddress(address).maxInboundMessageSize((int) MAX_MSG);
       if (config.hubTls()) {
         if (config.hubInsecure()) {
-          // TLS SEM validar o certificado (cert self-signed/quebrado) — equivalente ao
-          // `grpcurl -insecure`. NÃO usar em produção com cert válido.
           var ssl =
               io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts.forClient()
                   .trustManager(
@@ -171,20 +151,14 @@ public final class HubClient {
           LOG.at(Level.WARNING).log(
               "[PrefabsUploader] TLS INSEGURO (sem validar certificado) habilitado");
         } else {
-          // Endereço direto contorna o NameResolver, então o authority/SNI não vem do hostname
-          // automaticamente — fixamos via overrideAuthority pra o handshake TLS e a verificação
-          // de certificado baterem com o domínio real (ex.: atrás do Traefik/:443).
           builder.useTransportSecurity().overrideAuthority(hostPort[0]);
         }
       } else {
         builder.usePlaintext();
       }
-      // [H7] Em TODA RPC, anexa o identity token do servidor Hytale (sessions.hytale.com) pro hub
-      // provar que é um servidor real e autenticado. O hub rejeita conexões sem JWT válido.
       builder.intercept(identityInterceptor());
       this.channel = builder.build();
     } catch (Throwable t) {
-      // NUNCA propagar: uma falha de rede/config não pode derrubar o boot do servidor.
       LOG.at(Level.SEVERE).log(
           "[PrefabsUploader] falha ao criar canal gRPC para %s: %s",
           config.hubAddress(), t.getMessage());
@@ -197,9 +171,8 @@ public final class HubClient {
   }
 
   /**
-   * Gating da 1ª conexão: só conecta quando o servidor tem identity token do Hytale (autenticado).
-   * Faz polling curto até {@link #MAX_AUTH_WAIT_SEC}; se estourar, conecta assim mesmo. A reconexão
-   * (scheduleReconnect) não passa por aqui — o token já está pronto depois do boot.
+   * Gates the first connection until the server holds a Hytale identity token (authenticated).
+   * Polls briefly up to {@link #MAX_AUTH_WAIT_SEC}; connects anyway once that limit is reached.
    */
   private void awaitAuthThenConnect() {
     if (!running) {
@@ -226,7 +199,7 @@ public final class HubClient {
     scheduler.schedule(this::awaitAuthThenConnect, AUTH_POLL_SEC, TimeUnit.SECONDS);
   }
 
-  /** True se o servidor já está autenticado no Hytale (tem identity token). */
+  /** Returns true if the server is already authenticated with Hytale (holds an identity token). */
   private static boolean serverHasIdentityToken() {
     try {
       return com.hypixel.hytale.server.core.auth.ServerAuthManager.getInstance().hasIdentityToken();
@@ -236,8 +209,8 @@ public final class HubClient {
   }
 
   /**
-   * Interceptor que coloca {@code authorization: Bearer <identityToken>} em cada chamada. O token é
-   * lido na hora (o engine renova sozinho ~5min antes de expirar), então sempre vai o atual.
+   * Returns an interceptor that adds {@code authorization: Bearer <identityToken>} to every call.
+   * The token is read at call time, so the current one is always sent.
    */
   private ClientInterceptor identityInterceptor() {
     return new ClientInterceptor() {
@@ -263,7 +236,11 @@ public final class HubClient {
     };
   }
 
-  /** Lê o identity token do servidor pelo ServerAuthManager do engine (null se não autenticado). */
+  /**
+   * Reads the server identity token via the engine's ServerAuthManager.
+   *
+   * @return the identity token, or null if not authenticated
+   */
   private static String serverIdentityToken() {
     try {
       return com.hypixel.hytale.server.core.auth.ServerAuthManager.getInstance().getIdentityToken();
@@ -327,9 +304,7 @@ public final class HubClient {
     }
   }
 
-  /**
-   * Chamado por {@code /prefabs-uploader config setup}. Bloqueante — rode fora da thread do jogo.
-   */
+  /** Called by {@code /prefabs-uploader config setup}. Blocking — run off the game thread. */
   public SetupResponse requestSetup(String requestedBy) {
     if (channel == null) {
       throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
@@ -343,7 +318,7 @@ public final class HubClient {
             .build());
   }
 
-  /** Chamado por {@code /prefabs-uploader import}. Bloqueante — rode fora da thread do jogo. */
+  /** Called by {@code /prefabs-uploader import}. Blocking — run off the game thread. */
   public PlayerImportResponse playerImport(String playerUuid, String playerName) {
     if (channel == null) {
       throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
@@ -358,14 +333,8 @@ public final class HubClient {
             .build());
   }
 
-  // ---- [PULL] RPCs do fluxo de validação (lista/ponteiro/resolução) ----
-  // Auth: igual requestSetup/playerImport — só mandamos serverId; o identity token do servidor vai
-  // no header authorization (identityInterceptor) em TODA RPC. Além do gate de identidade, as RPCs
-  // de fila mandam o auth_token (token de pareamento) — o hub valida o par (server_id, auth_token)
-  // pra impedir que um servidor real-mas-malicioso leia/resolva a fila de OUTRO servidor.
-
   /**
-   * Lista os pendentes (só metadados/ponteiros) do hub. Bloqueante — rode fora da thread do mundo
+   * Lists the hub's pending entries (metadata/pointers only). Blocking — run off the world thread
    * (use {@link #io()}).
    */
   public ListPendingResponse listPending() {
@@ -382,8 +351,8 @@ public final class HubClient {
   }
 
   /**
-   * Pede uma URL de download FRESCA (CDN do Discord) pra um pendente. Bloqueante — rode fora da
-   * thread do mundo (use {@link #io()}). A URL é efêmera; NÃO persistir.
+   * Requests a fresh download URL (Discord CDN) for a pending entry. Blocking — run off the world
+   * thread (use {@link #io()}). The URL is ephemeral and must not be persisted.
    */
   public GetPendingResponse getPending(String id) {
     if (channel == null) {
@@ -400,8 +369,8 @@ public final class HubClient {
   }
 
   /**
-   * Resolve um pendente: aprovado (já gravado no storage vivo) ou rejeitado. Bloqueante — rode fora
-   * da thread do mundo (use {@link #io()}).
+   * Resolves a pending entry: approved (already written to live storage) or rejected. Blocking —
+   * run off the world thread (use {@link #io()}).
    */
   public ResolvePendingResponse resolvePending(String id, boolean approved, String resolvedBy) {
     if (channel == null) {
@@ -420,13 +389,15 @@ public final class HubClient {
   }
 
   /**
-   * Baixa o {@code .prefab.json} direto do CDN do Discord (HTTP GET na URL vinda de {@link
-   * #getPending}). Bloqueante — rode fora da thread do mundo (use {@link #io()}). Capa o corpo em
-   * {@link #CDN_MAX_BYTES} (8 MiB): lê em streaming e aborta se passar, pra não estourar memória. A
-   * URL NÃO é persistida.
+   * Downloads the {@code .prefab.json} directly from the Discord CDN (HTTP GET on the URL returned
+   * by {@link #getPending}). Blocking — run off the world thread (use {@link #io()}). Reads in a
+   * streaming fashion and aborts if the body exceeds {@link #CDN_MAX_BYTES}.
    *
-   * @throws IOException URL inválida/insegura, status não-2xx, corpo acima do teto, ou falha de
-   *     rede
+   * @param url the HTTPS download URL
+   * @return the downloaded bytes
+   * @throws IOException if the URL is invalid/insecure, the status is non-2xx, the body exceeds the
+   *     cap, or a network failure occurs
+   * @throws InterruptedException if the operation is interrupted
    */
   public byte[] downloadFromCdn(String url) throws IOException, InterruptedException {
     if (url == null || url.isBlank()) {
@@ -440,7 +411,6 @@ public final class HubClient {
     }
     String scheme = uri.getScheme();
     if (scheme == null || !scheme.equalsIgnoreCase("https")) {
-      // Só HTTPS (CDN do Discord). Bloqueia file://, http:// e afins (anti-SSRF básico).
       throw new IOException("URL de download não é https");
     }
 
@@ -452,7 +422,6 @@ public final class HubClient {
     int status = resp.statusCode();
     if (status / 100 != 2) {
       try (InputStream ignored = resp.body()) {
-        // drena/fecha o corpo de erro
       } catch (IOException e) {
         LOG.at(Level.FINE).log(
             "[PrefabsUploader] falha ao fechar corpo de erro: %s", e.getMessage());
@@ -460,7 +429,6 @@ public final class HubClient {
       throw new IOException("download falhou (HTTP " + status + ")");
     }
 
-    // Lê em streaming com teto rígido (não confiamos no Content-Length do CDN).
     try (InputStream in = resp.body();
         java.io.ByteArrayOutputStream out =
             new java.io.ByteArrayOutputStream(Math.min(CDN_MAX_BYTES, 64 * 1024))) {
@@ -479,7 +447,7 @@ public final class HubClient {
     }
   }
 
-  /** HttpClient lazy (montado no 1º download, fora da thread do mundo). */
+  /** Returns the lazily built HttpClient (created on the first download, off the world thread). */
   private HttpClient httpClient() {
     HttpClient c = httpClient;
     if (c == null) {
@@ -517,7 +485,6 @@ public final class HubClient {
           out.onCompleted();
         }
       } catch (Throwable t) {
-        // stream já pode estar morto; só registramos (NUNCA silenciar exceção).
         LOG.at(Level.FINE).log(
             "[PrefabsUploader] onCompleted no shutdown falhou: %s", t.getMessage());
       }
@@ -535,16 +502,14 @@ public final class HubClient {
     return new String[] {addr.substring(0, i), addr.substring(i + 1)};
   }
 
-  /** Trata as mensagens descendentes do hub. */
+  /** Handles the downstream messages coming from the hub. */
   private final class HubResponseObserver implements StreamObserver<HubMessage> {
     @Override
     public void onNext(HubMessage msg) {
-      backoffSec = BACKOFF_MIN_SEC; // recebeu algo → conexão saudável
+      backoffSec = BACKOFF_MIN_SEC;
       switch (msg.getPayloadCase()) {
         case CONFIG_STATE -> onConfigState(msg.getConfigState());
-        default -> {
-          // payload desconhecido / não-tratado (o hub não empurra mais prefabs) — ignora
-        }
+        default -> {}
       }
     }
 
@@ -562,7 +527,6 @@ public final class HubClient {
   }
 
   private void onConfigState(ConfigState cs) {
-    // Snapshot atômico: mantém a invite URL anterior se a nova vier vazia.
     String url = cs.getBotInviteUrl().isEmpty() ? state.get().inviteUrl() : cs.getBotInviteUrl();
     state.set(new HubState(cs.getConfigured(), url));
     if (!cs.getAuthToken().isEmpty()) {

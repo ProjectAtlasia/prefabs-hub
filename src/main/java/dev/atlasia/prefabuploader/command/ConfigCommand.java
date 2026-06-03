@@ -22,7 +22,7 @@ import com.hypixel.hytale.server.core.command.system.basecommands.AbstractComman
 import dev.atlasia.prefabuploader.client.HubClient;
 import javax.annotation.Nonnull;
 
-/** Sub-coleção {@code /prefabs-uploader config}. Autor: astahjmo (Astaroth). */
+/** Sub-command collection {@code /prefabs-uploader config}. */
 public class ConfigCommand extends AbstractCommandCollection {
 
   public ConfigCommand(@Nonnull HubClient client) {

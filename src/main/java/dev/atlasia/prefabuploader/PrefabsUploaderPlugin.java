@@ -29,21 +29,15 @@ import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
 /**
- * Entry point do PrefabsUploader.
- *
- * <p>Permite que o jogador envie seus prefabs locais pro servidor via Discord. Sob o modelo PULL, o
- * bot NÃO empurra mais nada e o servidor NÃO guarda o pendente em disco: o anexo vive no CDN do
- * Discord. Quando a staff abre {@code /prefabs-uploader validate}, o plugin lista os pendentes
- * (metadados via {@code ListPending}), baixa o selecionado EM MEMÓRIA pra preview e só grava no
- * storage vivo ({@link com.hypixel.hytale.server.core.prefab.PrefabStore}) ao APROVAR.
- *
- * <p>Mod: prefabs-uploader. Autor: astahjmo (Astaroth). Ver {@code docs/DESIGN.md}.
+ * Entry point of PrefabsUploader. Players send local prefabs to the server via Discord (PULL
+ * model): the attachment lives on Discord's CDN and is only written to {@link
+ * com.hypixel.hytale.server.core.prefab.PrefabStore} upon approval through {@code /prefabs-uploader
+ * validate}.
  */
 public class PrefabsUploaderPlugin extends JavaPlugin {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
 
-  // Pasta de dados do mod dentro de mods/ (mesma convenção dos outros mods: <Group>_<Name>).
   private static final String MOD_FOLDER = "ProjectAtlasia_PrefabsUploader";
 
   private PluginConfig config;
@@ -54,7 +48,12 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
     super(init);
   }
 
-  /** Pasta de dados do mod: {@code <mods>/ProjectAtlasia_PrefabsUploader/} (mods = pai do jar). */
+  /**
+   * Resolves the mod data directory at {@code <mods>/ProjectAtlasia_PrefabsUploader/}, where {@code
+   * mods} is the jar's parent folder.
+   *
+   * @return the mod data directory path
+   */
   private java.nio.file.Path dataDir() {
     try {
       java.nio.file.Path jar = getFile();
@@ -65,7 +64,6 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
       LOG.at(Level.WARNING).log(
           "[PrefabsUploader] não resolvi a pasta do mod via getFile(): %s", t.getMessage());
     }
-    // Fallback: mods/<folder> relativo ao diretório de trabalho do servidor.
     return java.nio.file.Paths.get("mods", MOD_FOLDER);
   }
 
@@ -79,8 +77,6 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
 
     this.getCommandRegistry().registerCommand(new PrefabsUploaderCommand(hubClient));
 
-    // Blindagem: a integração (rede/hub) NUNCA pode derrubar o boot. Se falhar, o plugin
-    // segue carregado, o comando registrado, e o cliente tenta reconectar em background.
     try {
       hubClient.start();
       broadcaster.start();
@@ -89,9 +85,6 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
           "[PrefabsUploader] falha ao iniciar integração (plugin segue carregado): %s",
           t.getMessage());
     }
-
-    // [PULL] Sem scheduler de limpeza local: o pendente não vive mais em disco do servidor (vive no
-    // CDN do Discord; o hub gerencia expiração/limpeza). Nada a limpar aqui.
 
     LOG.at(Level.INFO).log(
         "[PrefabsUploader] habilitado (server.id=%s, hub=%s).",

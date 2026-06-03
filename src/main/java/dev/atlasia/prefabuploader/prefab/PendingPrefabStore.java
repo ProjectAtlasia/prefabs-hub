@@ -34,15 +34,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 /**
- * Escreve no storage VIVO de server prefabs (a APROVAÇÃO) sob o novo modelo PULL.
- *
- * <p>O pendente NÃO vive mais em disco do servidor: ele só é materializado em memória quando a
- * staff o seleciona (download do CDN do Discord). Esta classe só entra na APROVAÇÃO: recebe os
- * bytes (já validados em memória por {@link PrefabValidator}), roda o validador NATIVO do engine —
- * que exige um {@code Path}, então escrevemos os bytes num arquivo TEMP do OS, validamos e
- * descartamos — e só então grava os bytes ORIGINAIS no {@code getServerPrefabsPath()} vivo (sem
- * re-serializar; o round-trip deserialize→serialize NPE-ava por falta de contexto de store). Autor:
- * astahjmo (Astaroth).
+ * Approves server prefabs: validates the bytes with the engine's native validator (via a temp file,
+ * which loadBuffer requires) and writes the original bytes into the live {@code
+ * getServerPrefabsPath()}.
  */
 public final class PendingPrefabStore {
 
@@ -51,7 +45,6 @@ public final class PendingPrefabStore {
   private static final int MAX_NAME_LEN = 48;
   private static final PendingPrefabStore INSTANCE = new PendingPrefabStore();
 
-  // Validação nativa do engine aplicada antes de confirmar o save (tunável).
   private static final Set<ValidationOption> VALIDATION =
       EnumSet.of(
           ValidationOption.BLOCKS,
@@ -59,7 +52,6 @@ public final class PendingPrefabStore {
           ValidationOption.ENTITIES,
           ValidationOption.BLOCK_FILLER);
 
-  // [M5] Serializa gravações concorrentes no storage vivo (dois admins aprovando ao mesmo tempo).
   private final ReentrantLock lock = new ReentrantLock();
 
   public static PendingPrefabStore get() {
@@ -69,15 +61,15 @@ public final class PendingPrefabStore {
   private PendingPrefabStore() {}
 
   /**
-   * Aprova: valida os bytes pelo validador NATIVO do engine e grava no {@code Prefabs/} vivo. Roda
-   * na thread do mundo (loadBuffer/validate tocam o engine). Lança {@link IOException} com mensagem
-   * amigável em caso de rejeição/erro — o chamador mostra ao admin e NÃO grava nada.
+   * Approves: validates the bytes with the engine's NATIVE validator and writes them into the live
+   * {@code Prefabs/}. Runs on the world thread (loadBuffer/validate touch the engine). Throws
+   * {@link IOException} on rejection/error so the caller can surface it without writing anything.
    *
-   * @param p metadados do pendente (id/nome/dono)
-   * @param data bytes do {@code .prefab.json} baixados do CDN (já passaram por {@link
-   *     PrefabValidator})
-   * @param adminName usuário do admin que aprovou (auditoria [M7])
-   * @param adminUuid uuid do admin que aprovou (auditoria [M7])
+   * @param p pending prefab metadata (id/name/owner)
+   * @param data bytes of the {@code .prefab.json}
+   * @param adminName username of the approving admin (audit)
+   * @param adminUuid uuid of the approving admin (audit)
+   * @throws IOException if the data is missing, rejected by validation, or the write fails
    */
   public void approve(PendingPrefab p, byte[] data, String adminName, String adminUuid)
       throws IOException {
@@ -90,8 +82,6 @@ public final class PendingPrefabStore {
 
     lock.lock();
     try {
-      // 1) Validação NATIVA do engine via arquivo TEMP do OS (loadBuffer exige Path). Descartado em
-      // qualquer caminho de saída (finally). NÃO toca no storage vivo.
       Path temp = Files.createTempFile("pu-approve-", SUFFIX);
       try {
         Files.write(temp, data);
@@ -110,16 +100,10 @@ public final class PendingPrefabStore {
         }
       }
 
-      // 2) Grava os bytes ORIGINAIS no storage VIVO (mesmo destino/forma do antigo promote:
-      // getServerPrefabsPath()/<owner>_<base>.prefab.json, anti path-traversal/symlink).
       Path liveRoot = PrefabStore.get().getServerPrefabsPath();
       Path dest = liveRoot.resolve(owner + "_" + base + SUFFIX);
       Files.createDirectories(dest.getParent());
 
-      // [H10] Anti path-traversal por symlink: normalize().startsWith() é só string e não resolve
-      // symlink. Validamos o caminho REAL — o diretório PAI (que já existe após createDirectories)
-      // precisa estar dentro do liveRoot real; o nome é validado à parte (toRealPath exige
-      // existência e o dest ainda não existe).
       Path liveRootReal = liveRoot.toRealPath();
       Path destParentReal = dest.getParent().toRealPath();
       if (!destParentReal.startsWith(liveRootReal)) {
@@ -135,7 +119,6 @@ public final class PendingPrefabStore {
 
       Files.write(dest, data);
 
-      // [M7] Trilha de auditoria: quem aprovou, o quê, de quem, quando.
       LOG.at(Level.INFO).log(
           "[PrefabsUploader] AUDITORIA aprovar: admin=%s(%s) prefab=%s owner=%s dest=%s bytes=%d at=%d",
           safe(adminName),
@@ -151,16 +134,14 @@ public final class PendingPrefabStore {
   }
 
   /**
-   * Roda o validador nativo do engine sobre o arquivo TEMP. Retorna a descrição dos problemas (ou
-   * null/vazio se OK).
+   * Runs the engine's native validator over the given file.
    *
-   * <p>[H9] Fail-SECURE: se o próprio validador falhar (contexto de engine indisponível, exceção
-   * inesperada), NÃO aceitamos o prefab — retornamos uma string de erro pra que {@code approve()} o
-   * REJEITE. A causa completa vai pro log.
+   * @param file the temp file holding the prefab bytes
+   * @return a description of the problems found, or null/empty if the prefab is valid; a non-empty
+   *     error string when the validator is unavailable (fail-secure)
    */
   private static String nativeValidate(Path file) {
     try {
-      // loadBuffer dá um PrefabBuffer; o IPrefabBuffer (leitura) vem de newAccess().
       IPrefabBuffer buffer = PrefabBufferUtil.loadBuffer(file).newAccess();
       return PrefabBufferValidator.validate(buffer, VALIDATION);
     } catch (Throwable t) {
@@ -170,7 +151,9 @@ public final class PendingPrefabStore {
     }
   }
 
-  /** Subpasta do dono: prefere o UUID Hytale (thread vinculada); cai pro Discord id; senão anon. */
+  /**
+   * Owner subfolder: prefers the Hytale UUID, falls back to the Discord id, otherwise anonymous.
+   */
   private static String ownerDir(PendingPrefab p) {
     String uuid = p.playerUuid();
     if (uuid != null && !uuid.isEmpty()) {
@@ -185,7 +168,7 @@ public final class PendingPrefabStore {
     return "discord_" + (digits.length() <= 8 ? digits : digits.substring(digits.length() - 8));
   }
 
-  /** Nome-base do arquivo: sanitização de charset, anti path-traversal e colisão. */
+  /** File base name: charset sanitization, anti path-traversal and collision handling. */
   private static String baseName(String rawName) {
     String raw = rawName == null ? "" : rawName;
     String cleaned = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");

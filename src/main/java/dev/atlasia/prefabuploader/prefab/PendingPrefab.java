@@ -21,20 +21,19 @@ package dev.atlasia.prefabuploader.prefab;
 import dev.atlasia.prefabuploader.grpc.PendingItem;
 
 /**
- * Um prefab pendente de análise da staff. Sob o novo modelo PULL, o pendente NÃO vive mais em disco
- * do servidor: isto é só o METADADO (ponteiro) que o hub devolve via {@code ListPending}. O arquivo
- * real fica no CDN do Discord e só é baixado (em memória) quando a staff seleciona o card. Autor:
- * astahjmo (Astaroth).
+ * Metadata for a prefab pending staff review. Only a pointer returned by the hub via {@code
+ * ListPending}; the actual file lives on the Discord CDN and is only downloaded into memory when a
+ * card is selected.
  *
- * @param id identificador opaco do pendente no hub (usado em {@code GetPending}/{@code
+ * @param id opaque identifier of the pending entry in the hub (used in {@code GetPending}/{@code
  *     ResolvePending})
- * @param prefabName nome do prefab pra exibir
- * @param uploaderName nome do uploader no Discord
- * @param uploaderDiscordId id do uploader no Discord
- * @param playerUuid uuid Hytale do jogador vinculado (pode ser vazio)
- * @param playerName nome in-game do jogador vinculado (pode ser vazio)
- * @param sizeBytes tamanho declarado do prefab em bytes
- * @param uploadedAt epoch-millis do upload
+ * @param prefabName prefab name to display
+ * @param uploaderName uploader name on Discord
+ * @param uploaderDiscordId uploader id on Discord
+ * @param playerUuid linked Hytale player uuid (may be empty)
+ * @param playerName linked in-game player name (may be empty)
+ * @param sizeBytes declared prefab size in bytes
+ * @param uploadedAt upload epoch-millis
  */
 public record PendingPrefab(
     String id,
@@ -46,7 +45,7 @@ public record PendingPrefab(
     long sizeBytes,
     long uploadedAt) {
 
-  /** Converte um {@link PendingItem} (proto do hub) no record de metadados da UI. */
+  /** Converts a {@link PendingItem} (hub proto) into the UI metadata record. */
   public static PendingPrefab fromProto(PendingItem item) {
     return new PendingPrefab(
         item.getId(),

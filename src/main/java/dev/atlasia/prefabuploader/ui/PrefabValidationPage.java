@@ -54,34 +54,22 @@ import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
 /**
- * UI "Validação de Prefabs" (admin): painel esquerdo = busca + lista de pendentes +
- * Aprovar/Deletar; painel direito = preview 3D in-panel.
+ * Admin "Prefab Validation" UI: lists pending prefabs with Approve/Delete actions and an in-panel
+ * 3D preview.
  *
- * <p>Modelo PULL: a lista vem do hub (metadados). Ao selecionar um card, o plugin baixa o {@code
- * .prefab.json} direto do CDN do Discord EM MEMÓRIA (via {@link HubClient#downloadFromCdn}), valida
- * ({@link PrefabValidator}) e renderiza o preview a partir do {@code BlockSelection} resultante —
- * SEM tocar em disco. Os bytes ficam só em memória ({@link #selectedBytes}) e são descartados ao
- * trocar de card, aprovar/rejeitar ou fechar. Só a APROVAÇÃO grava em disco (storage vivo).
- *
- * <p>Threading: chamadas gRPC bloqueantes e o download HTTP rodam no executor de I/O do {@link
- * HubClient} ({@link HubClient#io()}); packets de preview e {@code sendUpdate} voltam pra thread do
- * mundo via {@link #runOnWorld}. Cliques rápidos são protegidos por um contador de geração ({@link
- * #selectionGen}): só o ÚLTIMO selecionado renderiza.
- *
- * <p>Estrutura do {@code .ui} clonada do plugin {@code ger4d/hy-dungeon-generator}. O preview é
- * dirigido pelo packet {@link BuilderToolPrefabPreview}. Autor: astahjmo.
+ * <p>Pull model: the list comes from the hub; selecting a card downloads the {@code .prefab.json}
+ * from the CDN into memory, validates it ({@link PrefabValidator}) and renders the preview. Only
+ * approval writes to disk.
  */
 public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidationPage.Data> {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final int ROWS = 20;
 
-  // Preview tuning — valores idênticos aos plugins que funcionam (e ao PrefabPage vanilla).
   private static final int PREVIEW_TILT = 23;
   private static final int PREVIEW_SPIN_SPEED = 27;
   private static final int PREVIEW_SCALE = 100;
 
-  // Tints padrão (mesmos defaults do PrefabPage vanilla). Computados sob demanda e cacheados.
   private static volatile boolean tintsComputed;
   private static volatile Integer defaultBiomeTint;
   private static volatile Integer defaultWaterTint;
@@ -112,14 +100,8 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   private int selectedIndex = -1;
   private List<PendingPrefab> cached;
 
-  // [PULL] Bytes do prefab selecionado, baixados do CDN e mantidos SÓ em memória. Descartados ao
-  // trocar de card, aprovar/rejeitar ou fechar. Acessados da thread do mundo e do executor de I/O →
-  // volatile.
   private volatile byte[] selectedBytes;
 
-  // [PULL] Guarda de seleção stale: cada clique incrementa. Uma tarefa de background só aplica seu
-  // resultado (preview/bytes) se a geração ainda for a dela — cliques rápidos só renderizam o
-  // ÚLTIMO. Acessado de múltiplas threads → volatile.
   private volatile int selectionGen = 0;
 
   public PrefabValidationPage(
@@ -205,7 +187,9 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     sendUpdate();
   }
 
-  /** Clique num card: seleciona e dispara o download+validação do preview em background. */
+  /**
+   * Handles a card click: selects it and triggers the background download and preview validation.
+   */
   private void handleSelect(String action) {
     int rowIdx = parseIdx(action, "Select");
     List<PendingPrefab> view = filtered();
@@ -218,7 +202,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       selectedIndex = -1;
     }
 
-    // [PULL] Troca de seleção → descarta bytes do anterior e invalida tarefas de background velhas.
     selectedBytes = null;
     int gen = ++selectionGen;
     refresh();
@@ -228,7 +211,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       return;
     }
 
-    // Estado "carregando preview…" enquanto baixa do CDN.
     UICommandBuilder loading = new UICommandBuilder();
     loading.set(
         "#SelAuthor.TextSpans", Message.translation("server.prefabsuploader.ui.previewLoading"));
@@ -252,7 +234,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 runOnWorld(
                     () -> {
                       if (gen != selectionGen) {
-                        return; // o admin já trocou de card — ignora resultado velho
+                        return;
                       }
                       showDetailError("server.prefabsuploader.ui.previewDownloadError");
                     });
@@ -279,16 +261,19 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               runOnWorld(
                   () -> {
                     if (gen != selectionGen) {
-                      return; // seleção stale — não segura bytes nem renderiza
+                      return;
                     }
-                    selectedBytes = okBytes; // segura os bytes do ÚLTIMO selecionado
+                    selectedBytes = okBytes;
                     sendPreview(target, sel);
-                    refresh(); // restaura o painel de detalhe (sai do "carregando…")
+                    refresh();
                   });
             });
   }
 
-  /** Aprovar: valida nativo + grava no storage vivo, depois resolvePending(true) no hub. */
+  /**
+   * Approves the selection: native validation plus a write to live storage, then
+   * resolvePending(true) on the hub.
+   */
   private void handleAccept() {
     PendingPrefab sel = selected();
     if (sel == null) {
@@ -307,7 +292,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               try {
                 byte[] bytes = have;
                 if (bytes == null) {
-                  // Re-busca por segurança (bytes podem ter sido descartados).
                   GetPendingResponse gp = hubClient.getPending(sel.id());
                   bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
                   PrefabValidator.Result rv = PrefabValidator.validate(bytes);
@@ -317,8 +301,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 }
                 final byte[] finalBytes = bytes;
 
-                // A gravação (validação NATIVA + write no storage vivo) toca o engine → world
-                // thread.
                 runOnWorldAwait(
                     () -> {
                       try {
@@ -328,7 +310,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                       }
                     });
 
-                // Gravou: confirma no hub (bloqueante) e atualiza a UI.
                 ResolvePendingResponse resp = hubClient.resolvePending(sel.id(), true, adminName);
                 if (!resp.getOk() && !resp.getError().isBlank()) {
                   LOG.at(Level.WARNING).log(
@@ -358,7 +339,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
             });
   }
 
-  /** Rejeitar: resolvePending(false) no hub (sem disco). */
+  /** Rejects the selection via resolvePending(false) on the hub (no disk write). */
   private void handleDelete() {
     PendingPrefab sel = selected();
     if (sel == null) {
@@ -366,7 +347,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       return;
     }
     final String adminName = playerRef.getUsername();
-    // Rejeição não usa os bytes — descarta já.
     selectedBytes = null;
 
     hubClient
@@ -397,11 +377,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
             });
   }
 
-  // ---- preview 3D in-panel (PrefabPreviewComponent via BuilderToolPrefabPreview) ----
-  // Padrão idêntico ao plugin ger4d/hy-dungeon-generator e ao PrefabPage vanilla: monta o packet
-  // por campos e escreve via getPacketHandler(); o cliente amarra ao PrefabPreviewComponent da
-  // página ativa (o packet não tem id de componente). A FONTE do BlockSelection agora é o download
-  // do CDN (em memória), não mais o disco.
   private void sendPreview(PendingPrefab p, BlockSelection sel) {
     try {
       if (sel == null) {
@@ -410,7 +385,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       }
       EditorBlocksChange ebc = sel.toPacket();
       computeTints();
-      // Limpa o preview anterior antes de mandar o novo (mesmo padrão dos plugins que funcionam).
       playerRef.getPacketHandler().write(new BuilderToolPrefabPreview());
       BuilderToolPrefabPreview pkt = new BuilderToolPrefabPreview();
       pkt.tilt = PREVIEW_TILT;
@@ -429,7 +403,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     }
   }
 
-  /** Limpa o viewport de preview (packet vazio) — ao desselecionar, aprovar/deletar ou fechar. */
+  /** Clears the preview viewport with an empty packet on deselect, approval/deletion or close. */
   private void clearPreview() {
     try {
       playerRef.getPacketHandler().write(new BuilderToolPrefabPreview());
@@ -440,13 +414,12 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
 
   @Override
   public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
-    // [PULL] Fechou a UI → invalida tarefas pendentes e descarta os bytes em memória.
     selectionGen++;
     selectedBytes = null;
     clearPreview();
   }
 
-  /** Calcula os tints default uma vez (idêntico aos DEFAULT_*_TINT do PrefabPage vanilla). */
+  /** Computes the default biome and water tints once, caching the result. */
   private static void computeTints() {
     if (tintsComputed) {
       return;
@@ -464,9 +437,11 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     tintsComputed = true;
   }
 
-  // ---- threading: voltar pra thread do mundo ----
-
-  /** Mundo do jogador (pode ser null se desconectou). */
+  /**
+   * Returns the player's world.
+   *
+   * @return the world, or {@code null} if the player disconnected
+   */
   private World world() {
     try {
       return Universe.get().getWorld(playerRef.getWorldUuid());
@@ -476,7 +451,11 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     }
   }
 
-  /** Executa {@code r} na thread do mundo do jogador (packets/UI exigem world thread). */
+  /**
+   * Runs {@code r} on the player's world thread, as required for packet/UI operations.
+   *
+   * @param r the task to run
+   */
   private void runOnWorld(Runnable r) {
     World w = world();
     if (w == null) {
@@ -494,9 +473,11 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   /**
-   * Executa {@code r} na thread do mundo e BLOQUEIA até concluir (usado no approve: a validação
-   * nativa + write precisam terminar antes de confirmar no hub). Propaga a 1ª exceção. Chamado SÓ
-   * do executor de I/O — nunca da world thread (evita deadlock).
+   * Runs {@code r} on the world thread and blocks until it completes, propagating any exception.
+   * Must be called only from the I/O executor, never from the world thread, to avoid deadlock.
+   *
+   * @param r the task to run
+   * @throws Exception if the task fails or the world is unavailable
    */
   private void runOnWorldAwait(Runnable r) throws Exception {
     World w = world();
@@ -525,7 +506,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     }
   }
 
-  // ---- helpers ----
   private List<PendingPrefab> filtered() {
     if (searchFilter.isEmpty()) {
       return cached;
@@ -540,14 +520,16 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     return (selectedIndex >= 0 && selectedIndex < v.size()) ? v.get(selectedIndex) : null;
   }
 
-  /** Desseleciona e descarta os bytes em memória (invalidando tarefas de background pendentes). */
+  /**
+   * Clears the selection and discards the in-memory bytes, invalidating pending background tasks.
+   */
   private void deselect() {
     selectedIndex = -1;
     selectionGen++;
     selectedBytes = null;
   }
 
-  /** Remove um pendente da lista local (após aprovar/rejeitar). */
+  /** Removes a pending prefab from the local list after approval or rejection. */
   private void removeFromList(PendingPrefab p) {
     cached.removeIf(x -> x.id().equals(p.id()));
   }
@@ -577,7 +559,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       if (idx < view.size()) {
         PendingPrefab p = view.get(idx);
         b.set("#Card" + i + ".Visible", true);
-        // [L1] Sanitiza nome/autor antes de exibir (controle/bidi/zero-width).
         b.set("#CardName" + i + ".TextSpans", Message.raw(sanitize(p.prefabName())));
         b.set(
             "#CardAuthor" + i + ".TextSpans",
@@ -592,11 +573,8 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   private void updateDetail(UICommandBuilder b) {
     PendingPrefab p = selected();
     boolean has = p != null;
-    // #Detail fica SEMPRE visível (o PrefabPreviewComponent precisa existir no cliente quando o
-    // packet de preview chega). Só alternamos labels/estado dos botões.
     b.set("#Accept.Disabled", !has);
     b.set("#Delete.Disabled", !has);
-    // [L1] Sanitiza nome/autor antes de exibir (controle/bidi/zero-width).
     b.set(
         "#SelName.TextSpans",
         has
@@ -609,14 +587,14 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
             : Message.raw(""));
   }
 
-  /** Mostra uma mensagem de erro/estado no rótulo de autor do painel de detalhe. */
+  /** Shows an error or status message on the detail panel's author label. */
   private void showDetailError(String i18nKey) {
     UICommandBuilder b = new UICommandBuilder();
     b.set("#SelAuthor.TextSpans", Message.translation(i18nKey));
     sendUpdate(b, false);
   }
 
-  /** Mostra "validação falhou: <motivo>" no painel de detalhe (i18n com param). */
+  /** Shows a "validation failed" message with the given reason on the detail panel. */
   private void showDetailValidationFailed(String reason) {
     UICommandBuilder b = new UICommandBuilder();
     b.set(
@@ -651,12 +629,12 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   /**
-   * Linha de autor (i18n): nome IN-GAME + nome do Discord. O separador/"Discord:" vêm do .lang; os
-   * nomes vão como params já sanitizados ([L1] controle/bidi/zero-width). Retorna {@link Message}
-   * pra compor via {@code .param(key, Message)} no rótulo da UI.
+   * Builds the author line combining the in-game name and Discord name, both sanitized.
+   *
+   * @param p the pending prefab
+   * @return a {@link Message} for use via {@code .param(key, Message)} in the UI label
    */
   private static Message authorLine(PendingPrefab p) {
-    // Preferência: nome in-game enviado pelo bot (do vínculo) → resolução por UUID (cache/online).
     String hy = p.playerName();
     if (hy == null || hy.isBlank()) {
       hy = PlayerNameCache.get().resolve(p.playerUuid());
@@ -676,7 +654,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       return Message.translation("server.prefabsuploader.ui.authorDiscord")
           .param("discord", sanitize(dc));
     }
-    // Sem nome in-game nem Discord → cai pro uuid (fallback do antigo owner()).
     return Message.raw(sanitize(p.playerUuid()));
   }
 
@@ -689,10 +666,11 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   /**
-   * [L1] Remove caracteres de controle/formatação Unicode perigosos de strings vindas do jogador
-   * (nome do prefab / autor) antes de jogar na UI. Cobre: controles C0 (U+0000–U+001F) e DEL, bidi
-   * overrides/embeds/isolates (U+202A–U+202E, U+2066–U+2069), zero-width (U+200B–U+200D, U+FEFF) e
-   * o ZWNBSP/word-joiner. Evita spoofing de layout/RTL na UI de validação.
+   * Strips Unicode control and formatting characters (C0 controls, DEL, bidi overrides, zero-width)
+   * from player-supplied strings before display, preventing layout/RTL spoofing in the UI.
+   *
+   * @param s the input string
+   * @return the sanitized string, or an empty string if {@code s} is null or empty
    */
   private static String sanitize(String s) {
     if (s == null || s.isEmpty()) {
@@ -702,15 +680,15 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
       boolean drop =
-          c < 0x20 // controles C0
-              || c == 0x7F // DEL
-              || (c >= 0x202A && c <= 0x202E) // bidi overrides/embeds (LRE/RLE/PDF/LRO/RLO)
-              || (c >= 0x2066 && c <= 0x2069) // bidi isolates (LRI/RLI/FSI/PDI)
-              || c == 0x200B // zero-width space
-              || c == 0x200C // zero-width non-joiner
-              || c == 0x200D // zero-width joiner
-              || c == 0x2060 // word joiner
-              || c == 0xFEFF; // ZWNBSP / BOM
+          c < 0x20
+              || c == 0x7F
+              || (c >= 0x202A && c <= 0x202E)
+              || (c >= 0x2066 && c <= 0x2069)
+              || c == 0x200B
+              || c == 0x200C
+              || c == 0x200D
+              || c == 0x2060
+              || c == 0xFEFF;
       if (!drop) {
         sb.append(c);
       }

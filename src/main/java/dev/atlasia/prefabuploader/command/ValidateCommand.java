@@ -36,12 +36,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * {@code /prefabs-uploader validate} — abre a UI de validação de prefabs pendentes (admin).
+ * {@code /prefabs-uploader validate} — opens the pending-prefab validation UI (admin only).
  *
- * <p>Modelo PULL: a lista de pendentes vem do hub via {@code ListPending} (só metadados). A chamada
- * é BLOQUEANTE, então buscamos a lista no executor de I/O do {@link HubClient} (NUNCA na thread do
- * mundo) e só então abrimos a página (de volta na thread do mundo) com a lista já carregada. Autor:
- * astahjmo (Astaroth).
+ * <p>The pending list is fetched from the hub via {@code ListPending}. That call is blocking, so it
+ * runs on the {@link HubClient} I/O executor and the page is opened afterwards on the world thread.
  */
 public class ValidateCommand extends AbstractCommand {
 
@@ -64,8 +62,6 @@ public class ValidateCommand extends AbstractCommand {
     }
     PlayerRef sender = ctx.senderAs(PlayerRef.class);
 
-    // [PULL] ListPending é bloqueante → roda no executor de I/O do HubClient, fora da thread do
-    // mundo. Só depois abrimos a página (de volta na world thread) com a lista já carregada.
     hubClient
         .io()
         .execute(
@@ -88,7 +84,7 @@ public class ValidateCommand extends AbstractCommand {
     return CompletableFuture.completedFuture(null);
   }
 
-  /** Abre a página na thread do mundo do jogador, com a lista de pendentes já carregada. */
+  /** Opens the page on the player's world thread with the already-loaded pending list. */
   private void openPage(PlayerRef sender, List<PendingPrefab> items) {
     var world = Universe.get().getWorld(sender.getWorldUuid());
     if (world == null) {

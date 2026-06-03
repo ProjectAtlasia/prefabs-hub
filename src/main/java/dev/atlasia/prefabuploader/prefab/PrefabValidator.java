@@ -26,20 +26,18 @@ import java.util.logging.Level;
 import org.bson.BsonDocument;
 
 /**
- * Sanitização/validação de um prefab recebido ANTES de persistir. Um prefab pode carregar
- * componentes de entidade ({@code PrefabCopyableComponent}), então a regra dura aqui é: <b>rejeitar
- * qualquer entidade</b> e impor limites de tamanho/contagem. Autor: astahjmo (Astaroth).
+ * Validates an incoming prefab before persisting it: rejects entities and enforces size/count
+ * limits.
  */
 public final class PrefabValidator {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
 
-  // Limites (alinhados ao DESIGN.md): ≤ 8 MiB, ≤ 64³ blocos.
   public static final int MAX_BYTES = 8 << 20;
-  public static final int MAX_BLOCKS = 262_144; // 64*64*64
+  public static final int MAX_BLOCKS = 262_144;
   public static final int MAX_VOLUME = 262_144;
 
-  /** Resultado da validação: ou um BlockSelection válido, ou um motivo de rejeição. */
+  /** Validation outcome: either a valid BlockSelection or a rejection reason. */
   public record Result(boolean ok, BlockSelection selection, String error) {
     static Result reject(String error) {
       return new Result(false, null, error);
@@ -60,7 +58,6 @@ public final class PrefabValidator {
       return Result.reject("excede o limite de tamanho (" + (MAX_BYTES >> 20) + " MiB)");
     }
 
-    // O .prefab.json é BSON serializado → JSON (texto). Parse defensivo.
     BsonDocument doc;
     try {
       doc = BsonDocument.parse(new String(data, StandardCharsets.UTF_8));
@@ -86,20 +83,11 @@ public final class PrefabValidator {
       return Result.reject(
           "volume grande demais: " + sel.getSelectionVolume() + " > " + MAX_VOLUME);
     }
-    // Regra dura de segurança: nenhum prefab de jogador pode trazer entidades.
     if (sel.getEntityCount() > 0) {
       return Result.reject(
           "prefab contém entidades (" + sel.getEntityCount() + ") — não permitido");
     }
 
-    // TODO(segurança [M1]): whitelist explícita de block ids.
-    // BLOQUEADO: ainda não temos o mapeamento de ids → nomes de blocos permitidos do engine
-    // (precisa do registro de blocos / asset catalog do Hytale). Enquanto isso, a defesa em
-    // profundidade é: (a) validador nativo do engine (ValidationOption.BLOCKS em
-    // PendingPrefabStore),
-    // (b) rejeição de entidades acima, e (c) aprovação manual da staff antes de promover.
-    // Quando o mapeamento existir: iterar os blocos do BlockSelection e rejeitar ids fora da
-    // whitelist (blocos de comando, technical/internal, etc.).
     return Result.accept(sel);
   }
 }

@@ -32,25 +32,15 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Configuração persistente do plugin (em {@code prefabsuploader/config.properties}).
- *
- * <p>Guarda a identidade estável do servidor ({@code server.id}), o <b>endereço do hub gRPC</b>
- * ({@code hub.address} — é aqui que você aponta pra produção ou pra um bot local de teste) e o
- * {@code auth.token} emitido no pareamento.
- *
- * <p>O arquivo é gerado <b>comentado</b>; os comentários são preservados a cada gravação (escrita
- * própria, não {@code Properties.store}). Editou? Reinicie o servidor (Hytale não tem hot-reload).
- * Autor: astahjmo (Astaroth).
+ * Persistent plugin configuration ({@code config.properties}): {@code server.id}, {@code
+ * hub.address} (gRPC hub endpoint) and the {@code auth.token} issued during pairing.
  */
 public final class PluginConfig {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   public static final String PLUGIN_VERSION = "0.1.0";
 
-  // Default = bot LOCAL de teste (plaintext). O endereço do hub de PRODUÇÃO NÃO vai hardcoded no
-  // código aberto — o operador aponta hub.address no config.properties (ver render()).
   private static final String DEFAULT_HUB = "localhost:50051";
-  // Marcador de formato documentado: se o arquivo existente não tiver, fazemos upgrade uma vez.
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
   private final Path file;
@@ -65,10 +55,7 @@ public final class PluginConfig {
     this.file = file;
   }
 
-  /**
-   * Carrega (ou cria/migra) a config em {@code <dataDir>/config.properties}. Normalmente {@code
-   * dataDir} é {@code mods/ProjectAtlasia_PrefabsUploader/} (resolvido pelo plugin via getFile()).
-   */
+  /** Loads (or creates/migrates) the config at {@code <dataDir>/config.properties}. */
   public static PluginConfig load(Path dataDir) {
     PluginConfig cfg = new PluginConfig(dataDir.resolve("config.properties"));
     cfg.read();
@@ -76,7 +63,6 @@ public final class PluginConfig {
   }
 
   private void read() {
-    // Migração do local antigo (CWD/prefabsuploader/config.properties) pro novo (dentro de mods/).
     Path legacy = Paths.get("prefabsuploader", "config.properties");
     boolean newExists = Files.exists(file);
     boolean migrate = !newExists && Files.exists(legacy);
@@ -86,7 +72,7 @@ public final class PluginConfig {
     if (source != null) {
       Properties props = new Properties();
       try (InputStream in = Files.newInputStream(source)) {
-        props.load(in); // Properties.load lê em ISO-8859-1 (latin-1).
+        props.load(in);
       } catch (IOException e) {
         LOG.at(Level.WARNING).log("[PrefabsUploader] falha ao ler config: %s", e.getMessage());
       }
@@ -109,8 +95,6 @@ public final class PluginConfig {
       serverId = UUID.randomUUID().toString();
       LOG.at(Level.INFO).log("[PrefabsUploader] novo server.id gerado: %s", serverId);
     }
-    // Grava no arquivo NOVO: na criação, na migração, ou pra dar upgrade do formato antigo
-    // (sem comentários) uma vez. Se já está documentado, não reescreve no boot.
     if (fresh || migrate || !documented) {
       write();
     }
@@ -119,7 +103,6 @@ public final class PluginConfig {
       try {
         Files.deleteIfExists(legacy);
       } catch (IOException ignored) {
-        // não-fatal: deixa o arquivo antigo; o novo já é a fonte de verdade
       }
     }
   }
@@ -132,7 +115,7 @@ public final class PluginConfig {
     }
   }
 
-  /** Gera o arquivo COMENTADO a partir dos valores atuais (atômico + permissão 0600). */
+  /** Writes the commented config file from the current values (atomic write, 0600 permissions). */
   private synchronized void write() {
     String content = render();
     try {
@@ -140,11 +123,9 @@ public final class PluginConfig {
       Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
       Files.write(tmp, content.getBytes(StandardCharsets.ISO_8859_1));
       Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
-      // [H3] auth.token em repouso → restringe a "dono apenas" (0600). Best-effort em FS não-POSIX.
       try {
         Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
       } catch (UnsupportedOperationException ignored) {
-        // FS não-POSIX (ex.: Windows): segue sem 0600.
       } catch (IOException e) {
         LOG.at(Level.WARNING).log(
             "[PrefabsUploader] não foi possível restringir permissões da config: %s",
@@ -155,7 +136,7 @@ public final class PluginConfig {
     }
   }
 
-  /** Conteúdo documentado do config.properties (comentários ASCII, valores ASCII). */
+  /** Renders the documented {@code config.properties} content (ASCII comments and values). */
   private String render() {
     StringBuilder b = new StringBuilder();
     b.append(DOC_MARKER)
@@ -208,7 +189,7 @@ public final class PluginConfig {
     return authToken;
   }
 
-  /** Persiste um novo auth token recebido no pareamento (regrava o arquivo comentado). */
+  /** Persists a new auth token received during pairing, rewriting the commented file. */
   public synchronized void setAuthToken(String token) {
     if (token == null || token.equals(this.authToken)) {
       return;
@@ -217,7 +198,7 @@ public final class PluginConfig {
     write();
   }
 
-  /** Regrava a config (comentada) com os valores atuais. */
+  /** Rewrites the commented config with the current values. */
   public synchronized void save() {
     write();
   }

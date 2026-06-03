@@ -32,12 +32,8 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Cache persistente {@code UUID Hytale -> username}, pra exibir o nome IN-GAME do autor no {@code
- * /pu validate} (o upload em si só carrega o nome do Discord).
- *
- * <p>Populado quando temos o {@link PlayerRef} (no {@code /import}) e resolvido sob demanda pra
- * jogadores online via {@link Universe}. Persistido em {@code
- * prefabsuploader/player-names.properties}. Autor: astahjmo (Astaroth).
+ * Persistent {@code Hytale UUID -> username} cache stored in {@code
+ * prefabsuploader/player-names.properties}, used to display an author's in-game name.
  */
 public final class PlayerNameCache {
 
@@ -62,7 +58,12 @@ public final class PlayerNameCache {
     }
   }
 
-  /** Registra/atualiza o username in-game de um UUID (chamado no {@code /import}). */
+  /**
+   * Stores or updates the in-game username associated with a UUID.
+   *
+   * @param uuid the player's UUID
+   * @param username the player's in-game username
+   */
   public void put(String uuid, String username) {
     if (uuid == null || uuid.isBlank() || username == null || username.isBlank()) {
       return;
@@ -75,8 +76,12 @@ public final class PlayerNameCache {
   }
 
   /**
-   * Resolve o username in-game de um UUID: cache → jogador online ({@link Universe}) → {@code
-   * null}. Quando acha online, cacheia. Rode na world thread (faz lookup no Universe).
+   * Resolves the in-game username for a UUID, trying the cache first and then online players via
+   * {@link Universe}, caching the result when found online. Must run on the world thread because it
+   * looks up the {@link Universe}.
+   *
+   * @param uuid the player's UUID
+   * @return the resolved username, or {@code null} if it cannot be determined
    */
   public String resolve(String uuid) {
     if (uuid == null || uuid.isBlank()) {
