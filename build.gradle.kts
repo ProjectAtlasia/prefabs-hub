@@ -8,6 +8,8 @@ plugins {
     id("com.google.protobuf") version "0.9.4"
     // Shadow 9.x ships ASM that reads Java 25 bytecode (major 69); 8.x fails here.
     id("com.gradleup.shadow") version "9.4.2"
+    // Publishes the jar to CurseForge (supports Hytale; resolves game versions by name).
+    id("com.hypherionmc.modutils.modpublisher") version "2.2.1"
 }
 
 val grpcVersion = "1.71.0"
@@ -145,3 +147,21 @@ tasks.shadowJar {
 tasks.named("build") {
     dependsOn(tasks.shadowJar)
 }
+
+// Publicação no CurseForge (Hytale). Debug por padrão (NÃO sobe nada); -PcfPublish faz o upload real.
+// O token vem do env CURSE_TOKEN (secret no CI). modpublisher resolve "0.5" → ID e mira o endpoint Hytale.
+publisher {
+    apiKeys {
+        curseforge(System.getenv("CURSE_TOKEN") ?: "")
+    }
+    gameType.set("hytale")
+    debug.set(!project.hasProperty("cfPublish"))
+    curseID.set("1563303")
+    versionType.set("release")
+    projectVersion.set("${project.version}-$buildTime")
+    displayName.set("prefabs-hub v${project.version} ($buildTime)")
+    setGameVersions("0.5")
+    artifact.set("build/libs/prefabs-hub-${project.version}-$buildTime.jar")
+}
+
+tasks.named("publishCurseforge") { dependsOn("shadowJar") }

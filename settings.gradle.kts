@@ -1,5 +1,14 @@
 import dev.scaffoldit.hytale.wire.HytaleManifest
 
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        // modpublisher — publica o jar no CurseForge (suporta Hytale nativamente)
+        maven { url = uri("https://maven.firstdark.dev/releases") }
+    }
+}
+
 rootProject.name = "dev.atlasia.prefabuploader"
 
 plugins {

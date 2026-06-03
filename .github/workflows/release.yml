@@ -1,6 +1,6 @@
 name: release
 
-# Push na master = release real (GitHub release + upload no CurseForge).
+# Push na master = release real (GitHub release + upload no CurseForge via modpublisher).
 # Dispatch manual = dry-run por padrão: builda e valida, SEM criar release em lugar nenhum.
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      CF_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,23 +57,6 @@ jobs:
         id: jar
         run: echo "path=$(ls build/libs/prefabs-hub-*.jar)" >> "$GITHUB_OUTPUT"
 
-      # Valida acesso ao CurseForge e resolve os IDs da linha Hytale 0.5.x (roda também no dry-run,
-      # como verificação; NÃO sobe arquivo). game_versions exige IDs numéricos do CurseForge.
-      - name: Resolve Hytale 0.5.x version IDs
-        if: env.CF_TOKEN != ''
-        id: cfver
-        run: |
-          set -euo pipefail
-          ids=$(curl -fsSL -H "X-Api-Token: $CF_TOKEN" \
-            https://hytale.curseforge.com/api/game/versions \
-            | jq -r '[.[] | select((.name // "") | startswith("0.5")) | .id] | join(",")')
-          echo "Hytale 0.5.x version IDs resolvidos: ${ids:-<vazio>}"
-          if [ -z "$ids" ]; then
-            echo "::error::Nenhum ID de versão Hytale 0.5.x encontrado. Confira token/endpoint/estrutura."
-            exit 1
-          fi
-          echo "ids=$ids" >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub release
         if: steps.gate.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
@@ -83,22 +66,21 @@ jobs:
           files: ${{ steps.jar.outputs.path }}
           generate_release_notes: true
 
-      - name: Upload to CurseForge
-        if: steps.gate.outputs.publish == 'true' && env.CF_TOKEN != ''
-        uses: itsmeow/curseforge-upload@v3
-        with:
-          token: ${{ secrets.CURSEFORGE_TOKEN }}
-          project_id: 1563303
-          game_endpoint: hytale
-          file_path: ${{ steps.jar.outputs.path }}
-          game_versions: ${{ steps.cfver.outputs.ids }}
-          release_type: release
-          display_name: prefabs-hub v${{ vars.PLUGIN_VERSION || '0.1.0' }} (${{ steps.meta.outputs.time }})
-          changelog: ${{ github.event.head_commit.message }}
-          changelog_type: markdown
+      # CurseForge via modpublisher (resolve a versão "0.5" → ID e mira o endpoint Hytale).
+      # Sem -PcfPublish, modpublisher roda em DEBUG (valida, não sobe nada) — é o dry-run.
+      # Só roda se o secret CURSEFORGE_TOKEN existir.
+      - name: ${{ steps.gate.outputs.publish == 'true' && 'Publish to CurseForge' || 'Validate CurseForge (dry-run)' }}
+        if: env.CURSE_TOKEN != ''
+        run: >
+          ./gradlew publishCurseforge
+          ${{ steps.gate.outputs.publish == 'true' && '-PcfPublish' || '' }}
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}"
+          -PhubTlsDefault=true
+          -PbuildTime=${{ steps.meta.outputs.time }}
+          --no-daemon
 
       - name: Dry-run summary
         if: steps.gate.outputs.publish != 'true'
         run: |
           echo "DRY-RUN: jar=$(basename '${{ steps.jar.outputs.path }}') — nenhuma release criada (GitHub/CurseForge)."
-          echo "CurseForge token presente: ${{ env.CF_TOKEN != '' }} | version IDs: ${{ steps.cfver.outputs.ids || 'n/a' }}"
+          echo "CurseForge token presente: ${{ env.CURSE_TOKEN != '' }}"
