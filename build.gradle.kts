@@ -65,6 +65,31 @@ sourceSets {
     }
 }
 
+// Default hub baked into the jar. Official/CurseForge builds inject the production hub via
+// -PhubDefault=host:port -PhubTlsDefault=true; the committed source stays generic (localhost).
+val hubDefault = (findProperty("hubDefault") as String?) ?: "localhost:50051"
+val hubTlsDefault = (findProperty("hubTlsDefault") as String?)?.toBoolean() ?: false
+val generatedSrcDir = layout.buildDirectory.dir("generated/sources/builddefaults")
+val generateBuildDefaults by tasks.registering {
+    inputs.property("hubDefault", hubDefault)
+    inputs.property("hubTlsDefault", hubTlsDefault)
+    outputs.dir(generatedSrcDir)
+    doLast {
+        val pkg = generatedSrcDir.get().dir("dev/atlasia/prefabuploader/config").asFile
+        pkg.mkdirs()
+        pkg.resolve("BuildDefaults.java").writeText(
+            "package dev.atlasia.prefabuploader.config;\n\n" +
+                "final class BuildDefaults {\n" +
+                "  static final String HUB_ADDRESS = \"$hubDefault\";\n" +
+                "  static final boolean HUB_TLS = $hubTlsDefault;\n\n" +
+                "  private BuildDefaults() {}\n" +
+                "}\n",
+        )
+    }
+}
+sourceSets.named("main") { java.srcDir(generatedSrcDir) }
+tasks.named("compileJava") { dependsOn(generateBuildDefaults) }
+
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:$protobufVersion" }
     plugins {

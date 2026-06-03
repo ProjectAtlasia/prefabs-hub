@@ -40,7 +40,7 @@ public final class PluginConfig {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   public static final String PLUGIN_VERSION = "0.1.0";
 
-  private static final String DEFAULT_HUB = "localhost:50051";
+  private static final String DEFAULT_HUB = BuildDefaults.HUB_ADDRESS;
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
   private final Path file;
@@ -78,14 +78,15 @@ public final class PluginConfig {
       }
       serverId = props.getProperty("server.id", "");
       hubAddress = props.getProperty("hub.address", DEFAULT_HUB);
-      hubTls = Boolean.parseBoolean(props.getProperty("hub.tls", "false"));
+      hubTls =
+          Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(BuildDefaults.HUB_TLS)));
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
       authToken = props.getProperty("auth.token", "");
       documented = newExists && hasDocMarker();
     } else {
       serverId = "";
       hubAddress = DEFAULT_HUB;
-      hubTls = false;
+      hubTls = BuildDefaults.HUB_TLS;
       hubInsecure = false;
       authToken = "";
     }
