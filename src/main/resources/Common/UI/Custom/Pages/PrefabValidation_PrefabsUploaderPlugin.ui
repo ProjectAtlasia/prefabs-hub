@@ -1,0 +1,206 @@
+$C = "../Common.ui";
+
+// UI "Validacao de Prefabs" (admin) — PrefabsUploader. Autor: astahjmo (Astaroth).
+// Estrutura clonada do plugin ger4d/hy-dungeon-generator (que renderiza o PrefabPreviewComponent
+// com sucesso a partir de um custom page de plugin): UM $C.@Container, #Content (LayoutMode: Left)
+// com dois Groups lado a lado, e o componente dentro de um Group #PreviewViewport (LayoutMode: Full)
+// com altura fixa + Background. Dirigido pelo packet BuilderToolPrefabPreview.
+
+$C.@PageOverlay {}
+
+$C.@Container {
+  Anchor: (Width: 1180, Height: 760);
+
+  #Title {
+    Group { $C.@Title { @Text = %server.prefabsuploader.ui.title; } }
+  }
+
+  #Content {
+    LayoutMode: Left;
+    Padding: (Horizontal: 16, Bottom: 16, Top: 4);
+
+    // ===================== ESQUERDA: lista + acoes =====================
+    Group #ListPane {
+      LayoutMode: Top;
+      Anchor: (Width: 620, Right: 14);
+
+      Group { Anchor: (Height: 34, Bottom: 6); LayoutMode: Center;
+        $C.@TextField #SearchInput { Anchor: (Height: 32); FlexWeight: 1;
+          PlaceholderText: %server.prefabsuploader.ui.searchPlaceholder; }
+      }
+
+      Label #PageInfo { Anchor: (Height: 18, Bottom: 6);
+        Style: (FontSize: 13, RenderBold: true, TextColor: #88ccff); }
+
+      Group #PendingList {
+        FlexWeight: 1;
+        LayoutMode: TopScrolling;
+        ScrollbarStyle: $C.@DefaultScrollbarStyle;
+        Padding: (Horizontal: 4);
+
+        Button #Card0 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName0   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor0 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card1 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName1   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor1 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card2 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName2   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor2 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card3 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName3   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor3 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card4 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName4   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor4 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card5 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName5   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor5 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card6 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName6   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor6 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card7 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName7   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor7 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card8 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName8   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor8 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card9 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName9   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor9 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card10 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName10   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor10 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card11 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName11   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor11 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card12 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName12   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor12 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card13 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName13   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor13 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card14 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName14   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor14 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card15 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName15   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor15 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card16 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName16   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor16 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card17 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName17   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor17 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card18 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName18   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor18 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+        Button #Card19 { Visible: false; Anchor: (Top: 2, Height: 42); Style: (...$C.@SecondaryButtonStyle);
+          Group { LayoutMode: Top; Padding: (Horizontal: 12, Vertical: 4);
+            Label #CardName19   { Style: (FontSize: 14, RenderBold: true, TextColor: #ffffff); }
+            Label #CardAuthor19 { Style: (FontSize: 12, TextColor: #94a7bb); }
+          }
+        }
+      }
+
+      Group { Anchor: (Height: 34, Top: 8); LayoutMode: Center;
+        $C.@SecondaryTextButton #PrevButton { @Anchor = (Right: 4, Width: 90); Text: %server.prefabsuploader.ui.prev; }
+        $C.@SecondaryTextButton #NextButton { @Anchor = (Left: 4, Width: 90); Text: %server.prefabsuploader.ui.next; }
+      }
+
+      Label #SelName   { Anchor: (Height: 24, Top: 8);
+        Style: (FontSize: 16, RenderBold: true, TextColor: #88ccff, HorizontalAlignment: Center); }
+      Label #SelAuthor { Anchor: (Height: 18, Top: 2);
+        Style: (FontSize: 12, TextColor: #cccccc, HorizontalAlignment: Center); }
+
+      Group { Anchor: (Height: 40, Top: 8); LayoutMode: Center;
+        $C.@TextButton #Accept          { @Anchor = (Right: 6, Width: 160); Text: %server.prefabsuploader.ui.accept; }
+        $C.@SecondaryTextButton #Delete { @Anchor = (Left: 6, Width: 160); Text: %server.prefabsuploader.ui.delete; }
+      }
+    }
+
+    // ===================== DIREITA: preview 3D =====================
+    Group #PreviewPanel {
+      LayoutMode: Top;
+      Anchor: (Width: 480);
+      Padding: (Horizontal: 4, Top: 0, Bottom: 4);
+
+      Label { Anchor: (Height: 30, Bottom: 8);
+        Style: (FontSize: 16, RenderBold: true, TextColor: #d3d6db, HorizontalAlignment: Center);
+        Text: %server.prefabsuploader.ui.previewTitle; }
+
+      Group #PreviewViewport {
+        LayoutMode: Full;
+        Anchor: (Height: 640);
+        Background: #05070a(0.55);
+
+        PrefabPreviewComponent #PrefabPreview {
+          AllowDragYaw: true;
+          AllowDragPitch: true;
+          AllowZoom: true;
+          AllowPan: true;
+          ShowAnchor: true;
+        }
+      }
+    }
+  }
+}
+
+$C.@BackButton {}

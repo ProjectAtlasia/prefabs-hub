@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 ProjectAtlasia
+//
+// This file is part of PrefabsUploader and is licensed under the GNU General Public
+// License v3.0. See the LICENSE file in the project root for the full text.
+
+syntax = "proto3";
+
+// Contrato gRPC do PrefabsUploader.
+//
+// Topologia:
+//   [Plugin Java = cliente]  ⇄  [Bot/Hub em Go = servidor gRPC + Discord]  ⇄  [Discord]
+//
+// O plugin DISCA pra fora (cliente), então o host do Hytale não precisa abrir porta.
+// Quem tem endereço público é o bot. Como o bot precisa EMPURRAR prefabs pro plugin,
+// o canal principal é um stream BIDIRECIONAL (Connect): o plugin abre e mantém aberto,
+// manda Register/Heartbeat/PrefabAck pra cima, e recebe ConfigState/PrefabPush pra baixo.
+package prefabsuploader.v1;
+
+option go_package = "github.com/projectatlasia/prefabs-uploader/bot/gen/prefabsuploaderv1;prefabsuploaderv1";
+option java_multiple_files = true;
+option java_package = "dev.atlasia.prefabuploader.grpc";
+option java_outer_classname = "PrefabsUploaderProto";
+
+service PrefabsUploader {
+  // Canal persistente bidirecional. O plugin abre na inicialização e reconecta com backoff.
+  rpc Connect(stream PluginMessage) returns (stream HubMessage);
+
+  // /prefabs-uploader config setup → pede um código de pareamento ao hub.
+  // O player digita esse código no Discord (/setup server <código>) pra linkar os dois lados.
+  rpc RequestSetup(SetupRequest) returns (SetupResponse);
+
+  // /prefabs-uploader import → fluxo de envio POR JOGADOR.
+  // Se a conta (UUID) ainda não está vinculada a um usuário do Discord, devolve um código de
+  // vínculo (NEEDS_LINK). Se já vinculada e o jogador é membro da guild, o hub abre uma thread
+  // privada no canal de uploads (THREAD_OPENED). O resultado vem pronto pra mostrar in-game.
+  rpc PlayerImport(PlayerImportRequest) returns (PlayerImportResponse);
+
+  // ── Fila de revisão (PULL pelo plugin; o hub NÃO guarda o arquivo) ──
+  // Modelo: o anexo .prefab.json já está hospedado no CDN do Discord. O hub guarda só um
+  // PONTEIRO (ids da mensagem/anexo + metadados). O staff abre /pu validate → o plugin LISTA os
+  // pendentes (ListPending), e ao clicar num card pede uma URL de download FRESCA sob demanda
+  // (GetPending) — o token do anexo do Discord expira, então a URL NUNCA é persistida, é
+  // regenerada na hora. O plugin baixa direto do CDN, valida/renderiza EM MEMÓRIA, descarta ao
+  // trocar de card/fechar, e só GRAVA EM DISCO se aprovar. ResolvePending tira o pendente da fila.
+  rpc ListPending(ListPendingRequest) returns (ListPendingResponse);
+  rpc GetPending(GetPendingRequest) returns (GetPendingResponse);
+  rpc ResolvePending(ResolvePendingRequest) returns (ResolvePendingResponse);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plugin → Hub (subida do stream)
+// ─────────────────────────────────────────────────────────────────────────────
+
+message PluginMessage {
+  oneof payload {
+    Register register = 1;
+    Heartbeat heartbeat = 2;
+    PrefabAck prefab_ack = 3;
+  }
+}
+
+// Primeira mensagem do stream: identifica o servidor.
+message Register {
+  // UUID gerado e PERSISTIDO pelo plugin (identidade estável do servidor).
+  string server_id = 1;
+  string plugin_version = 2;
+  // Token emitido no pareamento (ver ConfigState.auth_token). Vazio antes de parear.
+  string auth_token = 3;
+}
+
+message Heartbeat {
+  int64 timestamp_ms = 1;
+}
+
+// Resultado de um PrefabPush (correlaciona por transfer_id).
+message PrefabAck {
+  string transfer_id = 1;
+  string prefab_name = 2;
+  bool ok = 3;
+  // Motivo quando ok=false (ex.: "rejeitado pela whitelist", "BSON inválido", "limite de tamanho").
+  string error = 4;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hub → Plugin (descida do stream)
+// ─────────────────────────────────────────────────────────────────────────────
+
+message HubMessage {
+  oneof payload {
+    ConfigState config_state = 1;
+    PrefabPush prefab_push = 2;
+  }
+}
+
+// Estado de configuração do servidor. O hub envia logo após o Register e sempre que mudar.
+// Enquanto configured=false, o plugin faz o broadcast periódico com bot_invite_url.
+message ConfigState {
+  bool configured = 1;
+  // Link de instalação do bot no Discord. SEMPRE preenchido (fonte única = hub).
+  string bot_invite_url = 2;
+  string guild_id = 3;
+  string guild_name = 4;
+  string channel_id = 5;
+  // Emitido no pareamento. O plugin persiste e reenvia em Register nas reconexões.
+  string auth_token = 6;
+}
+
+// Um prefab enviado pelo Discord, empurrado pro plugin.
+// data = conteúdo do .prefab.json (BSON serializado → JSON). Tipicamente ~100KB+.
+// Mensagens grandes exigem aumentar o maxInboundMessageSize nos dois lados (ver docs).
+message PrefabPush {
+  string transfer_id = 1;
+  // Nome pedido pelo uploader. O plugin SANITIZA e faz namespacing por dono antes de salvar.
+  string prefab_name = 2;
+  bytes data = 3;
+  string uploader_discord_id = 4;
+  string uploader_name = 5;
+  int64 size_bytes = 6;
+  // UUID Hytale do jogador dono, quando o upload veio de uma thread vinculada (/import).
+  // Vazio nos uploads diretos no canal. Usado pro namespacing/pendência por jogador.
+  string player_uuid = 7;
+  // Nome IN-GAME (Hytale) do jogador dono, vindo do vínculo (capturado no /import). Vazio em
+  // uploads diretos no canal. Exibido junto do nome do Discord no /pu validate.
+  string player_name = 8;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Setup / pareamento (unary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+message SetupRequest {
+  string server_id = 1;
+  // Nome do player que rodou o comando (auditoria; opcional).
+  string requested_by = 2;
+}
+
+message SetupResponse {
+  // Código curto pra digitar no Discord (ex.: "K7P-2QX").
+  string pairing_code = 1;
+  int64 expires_at_ms = 2;
+  // Link de instalação do bot (mostrado junto do código no chat).
+  string bot_invite_url = 3;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Import por jogador (/prefabs-uploader import)
+// ─────────────────────────────────────────────────────────────────────────────
+
+message PlayerImportRequest {
+  string server_id = 1;
+  string player_uuid = 2;   // UUID Hytale do jogador
+  string player_name = 3;
+}
+
+message PlayerImportResponse {
+  enum Status {
+    UNKNOWN = 0;
+    NEEDS_LINK = 1;          // conta não vinculada — usar link_code no Discord
+    THREAD_OPENED = 2;       // thread privada criada no canal de uploads
+    NOT_IN_GUILD = 3;        // conta vinculada mas o jogador não está na guild
+    NO_UPLOADS_CHANNEL = 4;  // dono não configurou o canal de uploads
+    NOT_CONFIGURED = 5;      // servidor não pareado com o Discord
+  }
+  Status status = 1;
+  string link_code = 2;      // preenchido quando status=NEEDS_LINK
+  int64 expires_at_ms = 3;
+  string message = 4;        // texto pronto pra exibir in-game
+  string bot_invite_url = 5; // link do bot (útil em NEEDS_LINK/NOT_IN_GUILD)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fila de revisão (pull pelo plugin) — o hub guarda só PONTEIROS, nunca o arquivo
+// ─────────────────────────────────────────────────────────────────────────────
+
+message ListPendingRequest {
+  string server_id = 1;
+  // Token de pareamento (igual ao Register). O hub valida o par (server_id, auth_token) pra
+  // impedir que um servidor real-mas-malicioso liste a fila de OUTRO servidor.
+  string auth_token = 2;
+}
+
+// Um pendente = um anexo .prefab.json postado no Discord, ainda não aprovado/rejeitado.
+// Tudo aqui é METADADO (ponteiro). O conteúdo só é baixado sob demanda via GetPending.
+message PendingItem {
+  string id = 1;                  // id estável do pendente (= attachment_id do Discord)
+  string prefab_name = 2;         // nome do arquivo (o plugin sanitiza antes de salvar)
+  string uploader_name = 3;       // nome no Discord de quem enviou
+  string uploader_discord_id = 4;
+  string player_uuid = 5;         // UUID Hytale do dono, se veio de thread vinculada (/import)
+  string player_name = 6;         // nome IN-GAME do dono, vindo do vínculo
+  int64 size_bytes = 7;
+  int64 uploaded_at_ms = 8;
+}
+
+message ListPendingResponse {
+  repeated PendingItem items = 1;
+}
+
+message GetPendingRequest {
+  string server_id = 1;
+  string id = 2;                  // PendingItem.id
+  string auth_token = 3;          // valida o par (server_id, auth_token)
+}
+
+message GetPendingResponse {
+  // URL assinada FRESCA do CDN do Discord (validade curta). O hub regenera na hora via API do
+  // Discord — o plugin baixa DIRETO desta URL e NUNCA a persiste (o token expira).
+  string download_url = 1;
+  string prefab_name = 2;
+  int64 size_bytes = 3;
+}
+
+message ResolvePendingRequest {
+  string server_id = 1;
+  string id = 2;
+  bool approved = 3;              // true = aprovado (o plugin já gravou em disco); false = rejeitado
+  string resolved_by = 4;         // staff que decidiu (auditoria + notificação ao uploader). Opcional.
+  string auth_token = 5;          // valida o par (server_id, auth_token)
+}
+
+message ResolvePendingResponse {
+  bool ok = 1;
+  string error = 2;
+}

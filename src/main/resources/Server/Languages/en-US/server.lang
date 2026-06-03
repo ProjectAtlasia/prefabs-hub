@@ -1,0 +1,62 @@
+# PrefabsUploader — en-US translations. Keys WITHOUT "server." prefix (engine maps server.X -> X).
+# In code use Message.translation("server.prefabsuploader.X"); in .ui use %server.prefabsuploader.X.
+# Params via {key} match .param("key", ...). Author: astahjmo.
+
+# ---- Command descriptions ----
+prefabsuploader.command.root.description = Prefab upload integration via Discord
+prefabsuploader.command.config.description = Configure the Discord integration
+prefabsuploader.command.config.setup.description = Generate a code to pair this server with Discord
+prefabsuploader.command.import.description = Send one of your prefabs to the server via Discord
+prefabsuploader.command.validate.description = Open the pending prefab validation UI
+
+# ---- /prefabs-uploader import ----
+prefabsuploader.import.notplayer = Only players can use /prefabs-uploader import.
+prefabsuploader.import.threadOpened = We opened a private Discord thread for you. Send your .prefab.json there.
+prefabsuploader.import.hubError = Failed to reach the hub. Make sure the Discord bot is online.
+prefabsuploader.import.needsLink = Link your account. On Discord, type:
+prefabsuploader.import.needsLink.code = /link {code}
+prefabsuploader.import.needsLink.invitePrompt = Not on the server? Join:
+prefabsuploader.import.needsLink.inviteButton = [ Discord ]
+prefabsuploader.import.needsLink.retry = Then run /prefabs-uploader import again.
+
+# ---- /prefabs-uploader config setup ----
+prefabsuploader.config.setup.generating = Generating code…
+prefabsuploader.config.setup.pairingCode = Pairing code:
+prefabsuploader.config.setup.pairingCode.value = {code}
+prefabsuploader.config.setup.step1 = 1) Add the bot:
+prefabsuploader.config.setup.step1.button = [ Add to Discord ]
+prefabsuploader.config.setup.step2 = 2) In the desired Discord channel, type:
+prefabsuploader.config.setup.step2.command = /setup server {code}
+prefabsuploader.config.setup.expires = The code expires in a few minutes.
+prefabsuploader.config.setup.hubError = Failed to reach the hub. Make sure the bot is online and hub.address is set in the config.
+
+# ---- /prefabs-uploader validate ----
+prefabsuploader.validate.notplayer = Only players can open the validation UI.
+
+# ---- Setup broadcast (server not paired) ----
+prefabsuploader.broadcast.setup.prefix = Configure the Discord connection for this plugin to work.
+prefabsuploader.broadcast.setup.noHub = Use /prefabs-uploader config setup once the hub is available.
+prefabsuploader.broadcast.setup.installPrompt = Install the bot:
+prefabsuploader.broadcast.setup.installButton = [ Add bot to Discord ]
+
+# ---- UI: Prefab Validation ----
+prefabsuploader.ui.title = Prefab Validation
+prefabsuploader.ui.searchPlaceholder = Search by author or name...
+prefabsuploader.ui.previewTitle = Preview
+prefabsuploader.ui.accept = Approve
+prefabsuploader.ui.delete = Delete
+prefabsuploader.ui.prev = < Prev
+prefabsuploader.ui.next = Next >
+prefabsuploader.ui.pageInfo = Pending: {count}  |  Page {page}/{pages}
+prefabsuploader.ui.cardAuthor = by {author}
+prefabsuploader.ui.selectPrompt = Select a prefab
+prefabsuploader.ui.author = Author: {author}
+prefabsuploader.ui.authorBoth = {hytale}  ·  Discord: {discord}
+prefabsuploader.ui.authorDiscord = Discord: {discord}
+prefabsuploader.ui.approved = Approved: {name}
+prefabsuploader.ui.removed = Removed: {name}
+prefabsuploader.ui.error = error: {error}
+prefabsuploader.ui.previewLoading = Loading preview…
+prefabsuploader.ui.previewDownloadError = Failed to download the prefab from Discord.
+prefabsuploader.ui.validationFailed = Validation failed: {error}
+prefabsuploader.ui.hubOffline = Could not reach the hub. Make sure the Discord bot is online.

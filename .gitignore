@@ -1,0 +1,46 @@
+### Build output ###
+build/
+.gradle/
+out/
+target/
+
+### Hytale / ScaffoldIt generated ###
+manifest.json
+libs/
+
+### Runtime server state (never commit) ###
+devserver/
+*.log
+
+### IDE ###
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.apt_generated
+.factorypath
+bin/
+
+### OS ###
+.DS_Store
+
+### Claude / tooling local state ###
+.claude-flow/
+.swarm/
+.hive-mind/
+.claude/
+
+### Privado / fora do plugin open-source (fica local, nunca publicado) ###
+# Bot/hub do Discord — componente proprietário (All Rights Reserved), repo próprio
+bot/
+# Codegen Go do bot (a build Gradle do plugin não usa)
+proto/Makefile
+# Docs internos: engenharia reversa do engine (risco EULA/IP de terceiro) e mapa de exploits
+docs/SECURITY-AUDIT.md
+docs/HYTALE-PREFAB-API.md
+docs/HYTALE-PREFAB-PIPELINE.md
+# Diretrizes internas de dev — não fazem parte do artefato open-source
+CLAUDE.md

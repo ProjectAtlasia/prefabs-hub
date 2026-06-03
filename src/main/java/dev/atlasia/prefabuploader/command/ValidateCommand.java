@@ -1,0 +1,110 @@
+/*
+ * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * Copyright (C) 2026 ProjectAtlasia
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+package dev.atlasia.prefabuploader.command;
+
+import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.command.system.AbstractCommand;
+import com.hypixel.hytale.server.core.command.system.CommandContext;
+import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.Universe;
+import dev.atlasia.prefabuploader.client.HubClient;
+import dev.atlasia.prefabuploader.grpc.ListPendingResponse;
+import dev.atlasia.prefabuploader.prefab.PendingPrefab;
+import dev.atlasia.prefabuploader.ui.PrefabValidationPage;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+/**
+ * {@code /prefabs-uploader validate} — abre a UI de validação de prefabs pendentes (admin).
+ *
+ * <p>Modelo PULL: a lista de pendentes vem do hub via {@code ListPending} (só metadados). A chamada
+ * é BLOQUEANTE, então buscamos a lista no executor de I/O do {@link HubClient} (NUNCA na thread do
+ * mundo) e só então abrimos a página (de volta na thread do mundo) com a lista já carregada. Autor:
+ * astahjmo (Astaroth).
+ */
+public class ValidateCommand extends AbstractCommand {
+
+  private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
+
+  private final HubClient hubClient;
+
+  public ValidateCommand(@Nonnull HubClient hubClient) {
+    super("validate", "server.prefabsuploader.command.validate.description");
+    requirePermission("projectatlasia.prefabsuploader.command.validate");
+    this.hubClient = hubClient;
+  }
+
+  @Nullable
+  @Override
+  protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
+    if (!ctx.isPlayer()) {
+      ctx.sendMessage(Message.translation("server.prefabsuploader.validate.notplayer"));
+      return CompletableFuture.completedFuture(null);
+    }
+    PlayerRef sender = ctx.senderAs(PlayerRef.class);
+
+    // [PULL] ListPending é bloqueante → roda no executor de I/O do HubClient, fora da thread do
+    // mundo. Só depois abrimos a página (de volta na world thread) com a lista já carregada.
+    hubClient
+        .io()
+        .execute(
+            () -> {
+              List<PendingPrefab> items;
+              try {
+                ListPendingResponse resp = hubClient.listPending();
+                items = resp.getItemsList().stream().map(PendingPrefab::fromProto).toList();
+              } catch (Throwable t) {
+                LOG.at(Level.WARNING).log(
+                    "[PrefabsUploader] ListPending falhou: %s", t.getMessage());
+                sender.sendMessage(
+                    Message.join(
+                        Message.raw("[PrefabsUploader] "),
+                        Message.translation("server.prefabsuploader.ui.hubOffline")));
+                return;
+              }
+              openPage(sender, items);
+            });
+    return CompletableFuture.completedFuture(null);
+  }
+
+  /** Abre a página na thread do mundo do jogador, com a lista de pendentes já carregada. */
+  private void openPage(PlayerRef sender, List<PendingPrefab> items) {
+    var world = Universe.get().getWorld(sender.getWorldUuid());
+    if (world == null) {
+      return;
+    }
+    world.execute(
+        () -> {
+          var store = world.getEntityStore().getStore();
+          Player player = store.getComponent(sender.getReference(), Player.getComponentType());
+          if (player == null) {
+            return;
+          }
+          player
+              .getPageManager()
+              .openCustomPage(
+                  sender.getReference(), store, new PrefabValidationPage(sender, hubClient, items));
+        });
+  }
+}
