@@ -1,3 +1,7 @@
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
 plugins {
     eclipse
     id("com.diffplug.spotless") version "7.0.4"
@@ -8,6 +12,13 @@ plugins {
 
 val grpcVersion = "1.71.0"
 val protobufVersion = "4.29.3"
+
+version = "0.1.0"
+
+// Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
+val buildTime =
+    (findProperty("buildTime") as String?)
+        ?: DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
 
 spotless {
     java {
@@ -115,6 +126,9 @@ tasks.named<JavaExec>("runServer") {
 
 tasks.shadowJar {
     archiveClassifier.set("")
+    // Final artifact name: prefabs-hub-<version>-<buildTime>.jar
+    archiveBaseName.set("prefabs-hub")
+    archiveVersion.set("${project.version}-$buildTime")
 
     dependencies {
         exclude(dependency("com.hypixel.hytale:.*:.*"))
