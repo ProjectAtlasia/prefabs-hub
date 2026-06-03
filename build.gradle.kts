@@ -160,6 +160,11 @@ publisher {
     versionType.set("release")
     projectVersion.set("${project.version}-$buildTime")
     displayName.set("prefabs-hub v${project.version} ($buildTime)")
+    // -PcfChangelog pode ser um caminho de arquivo (lido) ou texto literal.
+    changelog.set(
+        (findProperty("cfChangelog") as String?)?.let { if (file(it).exists()) file(it).readText() else it }
+            ?: "Automated release — see https://github.com/ProjectAtlasia/prefabs-hub/releases",
+    )
     setGameVersions("0.5")
     artifact.set("build/libs/prefabs-hub-${project.version}-$buildTime.jar")
 }
