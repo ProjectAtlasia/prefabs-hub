@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-commit: formata os .java staged com Spotless (google-java-format) antes do commit,
+# pra nunca entrar código fora do formato (independe do formatter do editor).
+#
+# Ative uma vez por clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+# Só age se houver .java staged (added/copied/modified) — commits sem Java passam instantâneo.
+staged_java=$(git diff --cached --name-only --diff-filter=ACM -- '*.java' || true)
+[ -z "$staged_java" ] && exit 0
+
+echo "[pre-commit] spotlessApply nos .java staged…"
+if ! ./gradlew spotlessApply -q; then
+  echo "[pre-commit] spotlessApply falhou — commit abortado." >&2
+  exit 1
+fi
+
+# Re-stage apenas os arquivos que JÁ estavam staged (o Spotless pode tê-los reformatado).
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -f "$f" ] && git add -- "$f"
+done <<< "$staged_java"
