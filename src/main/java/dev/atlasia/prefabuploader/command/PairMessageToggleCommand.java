@@ -43,7 +43,7 @@ public class PairMessageToggleCommand extends AbstractCommand {
     super(name, "server.prefabsuploader.command.config.pairMessage.description");
     this.config = config;
     this.enabled = enabled;
-    requirePermission("projectatlasia.prefabsuploader.command.prefabsuploader.config.pair-message");
+    requirePermission("projectatlasia.prefabsuploader.command.config.pair-message." + name);
   }
 
   @Nullable

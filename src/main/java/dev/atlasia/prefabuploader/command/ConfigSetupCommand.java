@@ -48,7 +48,7 @@ public class ConfigSetupCommand extends AbstractCommand {
   public ConfigSetupCommand(@Nonnull Client client) {
     super("setup", "server.prefabsuploader.command.config.setup.description");
     this.client = client;
-    requirePermission("projectatlasia.prefabsuploader.command.prefabsuploader.config.setup");
+    requirePermission("projectatlasia.prefabsuploader.command.config.setup");
   }
 
   @Nullable
