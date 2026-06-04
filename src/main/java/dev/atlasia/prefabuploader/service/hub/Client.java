@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,6 +19,8 @@
 package dev.atlasia.prefabuploader.service.hub;
 
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.server.core.HytaleServer;
+import com.hypixel.hytale.server.core.auth.ServerAuthManager;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.ConfigState;
 import dev.atlasia.prefabuploader.grpc.GetPendingRequest;
@@ -36,6 +38,7 @@ import dev.atlasia.prefabuploader.grpc.ResolvePendingRequest;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.grpc.SetupRequest;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
+import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -44,8 +47,11 @@ import io.grpc.ForwardingClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.shaded.io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.grpc.stub.StreamObserver;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -79,9 +85,11 @@ public final class Client {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long MAX_MSG = 16L << 20;
 
+  /** Per-call deadline applied to every blocking unary RPC. */
+  private static final long RPC_DEADLINE_SEC = 10;
+
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
-  private static final int CDN_MAX_BYTES =
-      dev.atlasia.prefabuploader.service.prefab.PrefabValidator.MAX_BYTES;
+  private static final int CDN_MAX_BYTES = PrefabValidator.MAX_BYTES;
 
   /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
   private static final long IDLE_TIMEOUT_SEC = 30;
@@ -100,7 +108,7 @@ public final class Client {
 
   private static final Metadata.Key<String> AUTHORIZATION =
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
-  // Headers de identificação enviados em TODA RPC: versão do plugin + nome do servidor Hytale.
+  // Identification headers sent on EVERY RPC: plugin version + Hytale server name.
   private static final Metadata.Key<String> PLUGIN_VERSION_HEADER =
       Metadata.Key.of("x-plugin-version", Metadata.ASCII_STRING_MARSHALLER);
   private static final Metadata.Key<String> SERVER_NAME_HEADER =
@@ -168,35 +176,39 @@ public final class Client {
       NettyChannelBuilder builder =
           NettyChannelBuilder.forAddress(address)
               .maxInboundMessageSize((int) MAX_MSG)
-              // Close the transport when idle; gRPC reopens it transparently on the next RPC.
               .idleTimeout(IDLE_TIMEOUT_SEC, TimeUnit.SECONDS);
-      if (config.hubTls()) {
-        if (config.hubInsecure()) {
-          var ssl =
-              io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts.forClient()
-                  .trustManager(
-                      io.grpc.netty.shaded.io.netty.handler.ssl.util.InsecureTrustManagerFactory
-                          .INSTANCE)
-                  .build();
-          builder.sslContext(ssl).overrideAuthority(hostPort[0]);
-          LOG.at(Level.WARNING).log(
-              "[PrefabsUploader] TLS INSEGURO (sem validar certificado) habilitado");
-        } else {
-          builder.useTransportSecurity().overrideAuthority(hostPort[0]);
-        }
-      } else {
-        builder.usePlaintext();
-      }
+      configureTransportSecurity(builder, hostPort[0]);
       builder.intercept(identityInterceptor());
       this.channel = builder.build();
     } catch (Throwable t) {
       LOG.at(Level.SEVERE).log(
-          "[PrefabsUploader] falha ao criar canal gRPC para %s: %s",
+          "[PrefabsUploader] failed to create gRPC channel to %s: %s",
           config.hubAddress(), t.getMessage());
       running = false;
       return;
     }
     awaitAuthThenConnect();
+  }
+
+  /**
+   * Applies the configured transport security to the channel builder: plaintext when TLS is off,
+   * standard TLS, or insecure TLS (no certificate validation — dev only). The channel closes when
+   * idle and gRPC reopens it transparently on the next RPC.
+   */
+  private void configureTransportSecurity(NettyChannelBuilder builder, String host)
+      throws javax.net.ssl.SSLException {
+    if (!config.hubTls()) {
+      builder.usePlaintext();
+      return;
+    }
+    if (!config.hubInsecure()) {
+      builder.useTransportSecurity().overrideAuthority(host);
+      return;
+    }
+    var ssl =
+        GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+    builder.sslContext(ssl).overrideAuthority(host);
+    LOG.at(Level.WARNING).log("[PrefabsUploader] INSECURE TLS (no certificate validation) enabled");
   }
 
   /**
@@ -209,21 +221,21 @@ public final class Client {
     }
     if (serverHasIdentityToken()) {
       LOG.at(Level.INFO).log(
-          "[PrefabsUploader] buscando estado inicial do hub em %s", config.hubAddress());
+          "[PrefabsUploader] fetching initial hub state from %s", config.hubAddress());
       bootFetchConfigState();
       return;
     }
     if (authWaitedSec >= MAX_AUTH_WAIT_SEC) {
       LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] sem identity token do Hytale após %ds — seguindo mesmo assim "
-              + "(o hub recusa se o servidor não estiver autenticado; rode /auth login).",
+          "[PrefabsUploader] no Hytale identity token after %ds — proceeding anyway "
+              + "(the hub rejects if the server is not authenticated; run /auth login).",
           MAX_AUTH_WAIT_SEC);
       bootFetchConfigState();
       return;
     }
     if (authWaitedSec == 0) {
       LOG.at(Level.INFO).log(
-          "[PrefabsUploader] aguardando autenticação do servidor no Hytale antes de falar com o hub…");
+          "[PrefabsUploader] waiting for the server to authenticate with Hytale before contacting the hub…");
     }
     authWaitedSec += AUTH_POLL_SEC;
     scheduler.schedule(this::awaitAuthThenConnect, AUTH_POLL_SEC, TimeUnit.SECONDS);
@@ -242,7 +254,7 @@ public final class Client {
     try {
       w = openWindow(BOOT_WINDOW_SEC);
     } catch (Throwable t) {
-      LOG.at(Level.INFO).log("[PrefabsUploader] estado inicial indisponível: %s", t.getMessage());
+      LOG.at(Level.INFO).log("[PrefabsUploader] initial state unavailable: %s", t.getMessage());
       scheduleBootRetry();
       return;
     }
@@ -257,7 +269,7 @@ public final class Client {
           bootDone = true;
           bootBackoffSec = BOOT_BACKOFF_MIN_SEC;
           w.close();
-          LOG.at(Level.INFO).log("[PrefabsUploader] estado inicial do hub recebido");
+          LOG.at(Level.INFO).log("[PrefabsUploader] initial hub state received");
         };
     stateWaiters.add(holder[0]);
     // If the window times out without a ConfigState, retry boot.
@@ -266,7 +278,7 @@ public final class Client {
           stateWaiters.remove(holder[0]);
           if (!bootDone) {
             LOG.at(Level.INFO).log(
-                "[PrefabsUploader] hub não respondeu com estado inicial — nova tentativa");
+                "[PrefabsUploader] hub did not respond with initial state — retrying");
             scheduleBootRetry();
           }
         });
@@ -284,7 +296,7 @@ public final class Client {
   /** Returns true if the server is already authenticated with Hytale (holds an identity token). */
   private static boolean serverHasIdentityToken() {
     try {
-      return com.hypixel.hytale.server.core.auth.ServerAuthManager.getInstance().hasIdentityToken();
+      return ServerAuthManager.getInstance().hasIdentityToken();
     } catch (Throwable t) {
       return false;
     }
@@ -308,8 +320,8 @@ public final class Client {
               headers.put(AUTHORIZATION, "Bearer " + token);
             } else {
               LOG.at(Level.WARNING).log(
-                  "[PrefabsUploader] sem identity token do Hytale — o hub vai recusar. "
-                      + "Autentique o servidor no Hytale (/auth login).");
+                  "[PrefabsUploader] no Hytale identity token — the hub will reject. "
+                      + "Authenticate the server with Hytale (/auth login).");
             }
             headers.put(PLUGIN_VERSION_HEADER, PluginConfig.PLUGIN_VERSION);
             String name = serverName();
@@ -330,24 +342,24 @@ public final class Client {
    */
   private static String serverIdentityToken() {
     try {
-      return com.hypixel.hytale.server.core.auth.ServerAuthManager.getInstance().getIdentityToken();
+      return ServerAuthManager.getInstance().getIdentityToken();
     } catch (Throwable t) {
       LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] falha ao obter identity token do Hytale: %s", t.getMessage());
+          "[PrefabsUploader] failed to obtain Hytale identity token: %s", t.getMessage());
       return null;
     }
   }
 
-  /** Nome do servidor Hytale (best-effort; vazio se indisponível), sanitizado pra header ASCII. */
+  /** Hytale server name (best-effort; empty if unavailable), sanitized for an ASCII header. */
   private static String serverName() {
     try {
-      return asciiHeader(com.hypixel.hytale.server.core.HytaleServer.get().getServerName());
+      return asciiHeader(HytaleServer.get().getServerName());
     } catch (Throwable t) {
       return "";
     }
   }
 
-  /** Mantém só ASCII imprimível e limita a 64 chars (metadados gRPC exigem ASCII). */
+  /** Keeps only printable ASCII and caps at 64 chars (gRPC metadata requires ASCII). */
   private static String asciiHeader(String s) {
     if (s == null) {
       return "";
@@ -422,7 +434,7 @@ public final class Client {
    */
   public Window openWindow(long seconds) {
     if (!running || channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
+      throw new IllegalStateException("integration not initialized (gRPC channel unavailable)");
     }
     synchronized (streamLock) {
       if (outbound == null) {
@@ -457,7 +469,7 @@ public final class Client {
                       .build())
               .build());
     }
-    LOG.at(Level.FINE).log("[PrefabsUploader] janela aberta — stream Connect ativo");
+    LOG.at(Level.FINE).log("[PrefabsUploader] window opened — Connect stream active");
   }
 
   /** Completes and drops the shared Connect stream. Holds streamLock. */
@@ -472,17 +484,16 @@ public final class Client {
         out.onCompleted();
       }
     } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] fechar stream falhou: %s", t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] closing stream failed: %s", t.getMessage());
     }
-    LOG.at(Level.FINE).log(
-        "[PrefabsUploader] todas as janelas fecharam — stream Connect encerrado");
+    LOG.at(Level.FINE).log("[PrefabsUploader] all windows closed — Connect stream shut down");
   }
 
   private void runSafe(Runnable r) {
     try {
       r.run();
     } catch (Throwable t) {
-      LOG.at(Level.WARNING).log("[PrefabsUploader] callback de janela falhou: %s", t.getMessage());
+      LOG.at(Level.WARNING).log("[PrefabsUploader] window callback failed: %s", t.getMessage());
     }
   }
 
@@ -521,7 +532,7 @@ public final class Client {
                 onLinked.accept(linked);
               } catch (Throwable t) {
                 LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] callback de link falhou: %s", t.getMessage());
+                    "[PrefabsUploader] link callback failed: %s", t.getMessage());
               }
             }
           }
@@ -539,35 +550,40 @@ public final class Client {
   // Unary RPCs
   // ---------------------------------------------------------------------------
 
+  /**
+   * Returns a blocking stub bound to the live channel with the standard per-call deadline.
+   *
+   * @throws IllegalStateException if the channel has not been initialized
+   */
+  private PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blockingStub() {
+    if (channel == null) {
+      throw new IllegalStateException("integration not initialized (gRPC channel unavailable)");
+    }
+    return PrefabsUploaderGrpc.newBlockingStub(channel)
+        .withDeadlineAfter(RPC_DEADLINE_SEC, TimeUnit.SECONDS);
+  }
+
   /** Called by {@code /prefabs-uploader config setup}. Blocking — run off the game thread. */
   public SetupResponse requestSetup(String requestedBy) {
-    if (channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
-    }
-    PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blocking =
-        PrefabsUploaderGrpc.newBlockingStub(channel).withDeadlineAfter(10, TimeUnit.SECONDS);
-    return blocking.requestSetup(
-        SetupRequest.newBuilder()
-            .setServerId(config.serverId())
-            .setRequestedBy(requestedBy == null ? "" : requestedBy)
-            .build());
+    return blockingStub()
+        .requestSetup(
+            SetupRequest.newBuilder()
+                .setServerId(config.serverId())
+                .setRequestedBy(requestedBy == null ? "" : requestedBy)
+                .build());
   }
 
   /**
    * Called by {@code /prefabs-uploader import}/{@code link}. Blocking — run off the game thread.
    */
   public PlayerImportResponse playerImport(String playerUuid, String playerName) {
-    if (channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
-    }
-    PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blocking =
-        PrefabsUploaderGrpc.newBlockingStub(channel).withDeadlineAfter(10, TimeUnit.SECONDS);
-    return blocking.playerImport(
-        PlayerImportRequest.newBuilder()
-            .setServerId(config.serverId())
-            .setPlayerUuid(playerUuid == null ? "" : playerUuid)
-            .setPlayerName(playerName == null ? "" : playerName)
-            .build());
+    return blockingStub()
+        .playerImport(
+            PlayerImportRequest.newBuilder()
+                .setServerId(config.serverId())
+                .setPlayerUuid(playerUuid == null ? "" : playerUuid)
+                .setPlayerName(playerName == null ? "" : playerName)
+                .build());
   }
 
   /**
@@ -575,16 +591,12 @@ public final class Client {
    * (use {@link #io()}).
    */
   public ListPendingResponse listPending() {
-    if (channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
-    }
-    PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blocking =
-        PrefabsUploaderGrpc.newBlockingStub(channel).withDeadlineAfter(10, TimeUnit.SECONDS);
-    return blocking.listPending(
-        ListPendingRequest.newBuilder()
-            .setServerId(config.serverId())
-            .setAuthToken(config.authToken())
-            .build());
+    return blockingStub()
+        .listPending(
+            ListPendingRequest.newBuilder()
+                .setServerId(config.serverId())
+                .setAuthToken(config.authToken())
+                .build());
   }
 
   /**
@@ -592,17 +604,13 @@ public final class Client {
    * thread (use {@link #io()}). The URL is ephemeral and must not be persisted.
    */
   public GetPendingResponse getPending(String id) {
-    if (channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
-    }
-    PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blocking =
-        PrefabsUploaderGrpc.newBlockingStub(channel).withDeadlineAfter(10, TimeUnit.SECONDS);
-    return blocking.getPending(
-        GetPendingRequest.newBuilder()
-            .setServerId(config.serverId())
-            .setId(id == null ? "" : id)
-            .setAuthToken(config.authToken())
-            .build());
+    return blockingStub()
+        .getPending(
+            GetPendingRequest.newBuilder()
+                .setServerId(config.serverId())
+                .setId(id == null ? "" : id)
+                .setAuthToken(config.authToken())
+                .build());
   }
 
   /**
@@ -610,19 +618,15 @@ public final class Client {
    * run off the world thread (use {@link #io()}).
    */
   public ResolvePendingResponse resolvePending(String id, boolean approved, String resolvedBy) {
-    if (channel == null) {
-      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
-    }
-    PrefabsUploaderGrpc.PrefabsUploaderBlockingStub blocking =
-        PrefabsUploaderGrpc.newBlockingStub(channel).withDeadlineAfter(10, TimeUnit.SECONDS);
-    return blocking.resolvePending(
-        ResolvePendingRequest.newBuilder()
-            .setServerId(config.serverId())
-            .setId(id == null ? "" : id)
-            .setApproved(approved)
-            .setResolvedBy(resolvedBy == null ? "" : resolvedBy)
-            .setAuthToken(config.authToken())
-            .build());
+    return blockingStub()
+        .resolvePending(
+            ResolvePendingRequest.newBuilder()
+                .setServerId(config.serverId())
+                .setId(id == null ? "" : id)
+                .setApproved(approved)
+                .setResolvedBy(resolvedBy == null ? "" : resolvedBy)
+                .setAuthToken(config.authToken())
+                .build());
   }
 
   /**
@@ -637,20 +641,7 @@ public final class Client {
    * @throws InterruptedException if the operation is interrupted
    */
   public byte[] downloadFromCdn(String url) throws IOException, InterruptedException {
-    if (url == null || url.isBlank()) {
-      throw new IOException("URL de download vazia");
-    }
-    URI uri;
-    try {
-      uri = URI.create(url.trim());
-    } catch (IllegalArgumentException e) {
-      throw new IOException("URL de download inválida");
-    }
-    String scheme = uri.getScheme();
-    if (scheme == null || !scheme.equalsIgnoreCase("https")) {
-      throw new IOException("URL de download não é https");
-    }
-
+    URI uri = requireHttpsUri(url);
     HttpResponse<InputStream> resp =
         httpClient()
             .send(
@@ -658,17 +649,45 @@ public final class Client {
                 HttpResponse.BodyHandlers.ofInputStream());
     int status = resp.statusCode();
     if (status / 100 != 2) {
-      try (InputStream ignored = resp.body()) {
-      } catch (IOException e) {
-        LOG.at(Level.FINE).log(
-            "[PrefabsUploader] falha ao fechar corpo de erro: %s", e.getMessage());
-      }
-      throw new IOException("download falhou (HTTP " + status + ")");
+      closeQuietly(resp.body());
+      throw new IOException("download failed (HTTP " + status + ")");
     }
+    try (InputStream in = resp.body()) {
+      return readCapped(in);
+    }
+  }
 
-    try (InputStream in = resp.body();
-        java.io.ByteArrayOutputStream out =
-            new java.io.ByteArrayOutputStream(Math.min(CDN_MAX_BYTES, 64 * 1024))) {
+  /**
+   * Validates that {@code url} is a non-blank https URL.
+   *
+   * @return the parsed URI
+   * @throws IOException if the URL is blank, malformed, or not https
+   */
+  private static URI requireHttpsUri(String url) throws IOException {
+    if (url == null || url.isBlank()) {
+      throw new IOException("empty download URL");
+    }
+    URI uri;
+    try {
+      uri = URI.create(url.trim());
+    } catch (IllegalArgumentException e) {
+      throw new IOException("invalid download URL");
+    }
+    String scheme = uri.getScheme();
+    if (scheme == null || !scheme.equalsIgnoreCase("https")) {
+      throw new IOException("download URL is not https");
+    }
+    return uri;
+  }
+
+  /**
+   * Reads the stream fully into memory, aborting once the body exceeds {@link #CDN_MAX_BYTES}.
+   *
+   * @throws IOException if the body exceeds the size cap or a read fails
+   */
+  private static byte[] readCapped(InputStream in) throws IOException {
+    try (ByteArrayOutputStream out =
+        new ByteArrayOutputStream(Math.min(CDN_MAX_BYTES, 64 * 1024))) {
       byte[] buf = new byte[16 * 1024];
       int total = 0;
       int n;
@@ -676,11 +695,20 @@ public final class Client {
         total += n;
         if (total > CDN_MAX_BYTES) {
           throw new IOException(
-              "prefab excede o limite de tamanho (" + (CDN_MAX_BYTES >> 20) + " MiB)");
+              "prefab exceeds the size limit (" + (CDN_MAX_BYTES >> 20) + " MiB)");
         }
         out.write(buf, 0, n);
       }
       return out.toByteArray();
+    }
+  }
+
+  /** Closes the stream, logging at FINE if it fails (used to drain an error response body). */
+  private static void closeQuietly(InputStream in) {
+    try {
+      in.close();
+    } catch (IOException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] failed to close error body: %s", e.getMessage());
     }
   }
 
@@ -747,7 +775,7 @@ public final class Client {
 
     @Override
     public void onError(Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] stream encerrado: %s", t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] stream closed: %s", t.getMessage());
       // Drop the dead stream; the next openWindow() reopens it.
       synchronized (streamLock) {
         outbound = null;
@@ -769,7 +797,7 @@ public final class Client {
       config.setAuthToken(cs.getAuthToken());
     }
     LOG.at(Level.INFO).log(
-        "[PrefabsUploader] config atualizada: configured=%s guild=%s",
+        "[PrefabsUploader] config updated: configured=%s guild=%s",
         cs.getConfigured(), cs.getGuildId());
     // Boot/state waiters fire on every ConfigState; configured waiters only when configured=true.
     for (Runnable w : new ArrayList<>(stateWaiters)) {
@@ -784,7 +812,7 @@ public final class Client {
 
   private void onPlayerLinked(PlayerLinked pl) {
     LOG.at(Level.INFO).log(
-        "[PrefabsUploader] player linkado: uuid=%s discord=%s",
+        "[PrefabsUploader] player linked: uuid=%s discord=%s",
         pl.getPlayerUuid(), pl.getDiscordName());
     List<Consumer<PlayerLinked>> snapshot = new ArrayList<>(linkWaiters);
     for (Consumer<PlayerLinked> w : snapshot) {
