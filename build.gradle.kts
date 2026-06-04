@@ -17,6 +17,7 @@ val protobufVersion = "4.29.3"
 
 version = "0.2.0" // x-release-please-version
 
+
 // Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
 val buildTime =
     (findProperty("buildTime") as String?)
