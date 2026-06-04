@@ -23,9 +23,13 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.messaging.LinkFlow;
+import dev.atlasia.prefabuploader.service.messaging.StatusReply;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
+import java.awt.Color;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -33,18 +37,24 @@ import javax.annotation.Nullable;
 
 /**
  * {@code /prefabs-uploader import} — per-player prefab upload flow. Asks the hub: if the account is
- * not linked, shows the link code; if it is, the hub opens a private Discord thread.
+ * not linked, runs the link flow; if it is, the hub opens a private Discord thread (or a DM
+ * fallback when the bot lacks thread permissions).
  */
 public class ImportCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
 
   private final Client client;
+  private final PluginConfig config;
+  private final LinkFlow linkFlow;
 
-  public ImportCommand(@Nonnull Client client) {
+  public ImportCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
     super("import", "server.prefabsuploader.command.import.description");
     this.client = client;
+    this.config = config;
+    this.linkFlow = new LinkFlow(client, config);
+    requirePermission("projectatlasia.prefabsuploader.command.import");
   }
 
   @Nullable
@@ -64,11 +74,14 @@ public class ImportCommand extends AbstractCommand {
           try {
             PlayerImportResponse res = client.playerImport(uuid, username);
             switch (res.getStatus()) {
-              case NEEDS_LINK -> showNeedsLink(context);
+              case NEEDS_LINK -> linkFlow.start(context, sender, uuid, res);
               case THREAD_OPENED ->
                   context.sendMessage(
                       tagged(Message.translation("server.prefabsuploader.import.threadOpened")));
-              default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
+              case DM_OPENED ->
+                  context.sendMessage(
+                      tagged(Message.translation("server.prefabsuploader.import.dmOpened")));
+              default -> StatusReply.send(context, res, config.inviteUrl());
             }
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport failed: %s", t.getMessage());
@@ -76,10 +89,6 @@ public class ImportCommand extends AbstractCommand {
                 tagged(Message.translation("server.prefabsuploader.import.hubError")));
           }
         });
-  }
-
-  private void showNeedsLink(CommandContext context) {
-    context.sendMessage(tagged(Message.translation("server.prefabsuploader.import.useLink")));
   }
 
   private static Message tagged(Message msg) {

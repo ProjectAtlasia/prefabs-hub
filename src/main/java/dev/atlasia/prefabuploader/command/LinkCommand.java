@@ -23,10 +23,13 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.Universe;
+import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.messaging.LinkFlow;
+import dev.atlasia.prefabuploader.service.messaging.StatusReply;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
+import java.awt.Color;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -40,16 +43,18 @@ import javax.annotation.Nullable;
 public class LinkCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final long LINK_WINDOW_SEC = 180;
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
-  private static final java.awt.Color CODE = new java.awt.Color(0x66, 0xDD, 0x77);
-  private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
 
   private final Client client;
+  private final PluginConfig config;
+  private final LinkFlow linkFlow;
 
-  public LinkCommand(@Nonnull Client client) {
+  public LinkCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
     super("link", "server.prefabsuploader.command.link.description");
     this.client = client;
+    this.config = config;
+    this.linkFlow = new LinkFlow(client, config);
+    requirePermission("projectatlasia.prefabsuploader.command.link");
   }
 
   @Nullable
@@ -69,11 +74,11 @@ public class LinkCommand extends AbstractCommand {
           try {
             PlayerImportResponse res = client.playerImport(uuid, username);
             switch (res.getStatus()) {
-              case NEEDS_LINK -> startLinkFlow(context, sender, uuid, res);
-              case THREAD_OPENED ->
+              case NEEDS_LINK -> linkFlow.start(context, sender, uuid, res);
+              case THREAD_OPENED, DM_OPENED ->
                   context.sendMessage(
                       tagged(Message.translation("server.prefabsuploader.link.alreadyLinked")));
-              default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
+              default -> StatusReply.send(context, res, config.inviteUrl());
             }
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log(
@@ -82,56 +87,6 @@ public class LinkCommand extends AbstractCommand {
                 tagged(Message.translation("server.prefabsuploader.link.hubError")));
           }
         });
-  }
-
-  private void startLinkFlow(
-      CommandContext context, PlayerRef sender, String uuid, PlayerImportResponse res) {
-    context.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
-            Message.translation("server.prefabsuploader.link.needsLink"),
-            Message.raw(" "),
-            Message.translation("server.prefabsuploader.link.code")
-                .param("code", res.getLinkCode())
-                .color(CODE)));
-    if (!res.getBotInviteUrl().isEmpty()) {
-      context.sendMessage(
-          Message.join(
-              Message.translation("server.prefabsuploader.link.invitePrompt"),
-              Message.raw(" "),
-              Message.translation("server.prefabsuploader.link.inviteButton")
-                  .color(DISCORD)
-                  .link(res.getBotInviteUrl())));
-    }
-    context.sendMessage(tagged(Message.translation("server.prefabsuploader.link.waiting")));
-
-    Client.Window window = client.openWindow(LINK_WINDOW_SEC);
-    Runnable dereg =
-        client.awaitPlayerLinked(
-            uuid,
-            linked -> {
-              window.close();
-              sendInGame(
-                  sender,
-                  Message.join(
-                      Message.raw("[PrefabsUploader] ").color(TAG),
-                      Message.translation("server.prefabsuploader.link.linked")
-                          .param("discord", linked.getDiscordName())));
-            });
-    window.onExpire(dereg);
-  }
-
-  /** Sends a message to the player on the world thread (no-op if the world/player is gone). */
-  private static void sendInGame(PlayerRef ref, Message msg) {
-    try {
-      var world = Universe.get().getWorld(ref.getWorldUuid());
-      if (world != null) {
-        world.execute(() -> ref.sendMessage(msg));
-      }
-    } catch (Throwable t) {
-      LOG.at(Level.FINE).log(
-          "[PrefabsUploader] in-game link confirmation failed: %s", t.getMessage());
-    }
   }
 
   private static Message tagged(Message msg) {

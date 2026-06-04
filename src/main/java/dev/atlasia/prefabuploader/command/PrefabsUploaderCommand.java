@@ -30,8 +30,8 @@ public class PrefabsUploaderCommand extends AbstractCommandCollection {
     super("prefabsuploader", "server.prefabsuploader.command.root.description");
     addAliases("prefabs-uploader", "pu");
     addSubCommand(new ConfigCommand(client, config));
-    addSubCommand(new ImportCommand(client));
+    addSubCommand(new ImportCommand(client, config));
     addSubCommand(new ValidateCommand(client));
-    addSubCommand(new LinkCommand(client));
+    addSubCommand(new LinkCommand(client, config));
   }
 }

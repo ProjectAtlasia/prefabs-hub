@@ -12,12 +12,16 @@ prefabsuploader.command.validate.description = Open the pending prefab validatio
 # ---- /prefabs-uploader import ----
 prefabsuploader.import.notplayer = Only players can use /prefabs-uploader import.
 prefabsuploader.import.threadOpened = We opened a private Discord thread for you. Send your .prefab.json there.
+prefabsuploader.import.dmOpened = I couldn't open a thread (the server owner must fix the bot's permissions). I DMed you — send your .prefab.json there.
 prefabsuploader.import.hubError = Failed to reach the hub. Make sure the Discord bot is online.
-prefabsuploader.import.needsLink = Link your account. On Discord, type:
-prefabsuploader.import.needsLink.code = /link {code}
-prefabsuploader.import.needsLink.invitePrompt = Not on the server? Join:
-prefabsuploader.import.needsLink.inviteButton = [ Discord ]
-prefabsuploader.import.needsLink.retry = Then run /prefabs-uploader import again.
+
+# ---- import/link status (configuration/contact) ----
+prefabsuploader.status.notConfigured = This server isn't set up on Discord yet. Ask an admin.
+prefabsuploader.status.noUploadsChannel = The uploads channel isn't configured. Ask an admin (/setup uploads).
+prefabsuploader.status.notInGuild = You must be in the server's Discord to send prefabs.
+prefabsuploader.status.inviteNotConfigured = You must be in the server's Discord, but the invite hasn't been configured yet. Ask an admin.
+prefabsuploader.status.joinPrompt = Join here:
+prefabsuploader.status.contactFailed = I couldn't reach you on Discord. Review your privacy settings (allow server DMs/threads) and try again.
 
 # ---- /prefabs-uploader config setup ----
 prefabsuploader.config.setup.generating = Generating code…
@@ -70,9 +74,9 @@ prefabsuploader.link.invitePrompt = Not in the server? Join:
 prefabsuploader.link.inviteButton = [ Discord ]
 prefabsuploader.link.waiting = Waiting for you to link on Discord (3 min)…
 prefabsuploader.link.linked = Account linked! Discord: {discord}
+prefabsuploader.link.expired = Timed out. Run /prefabs-uploader import again to resend.
 prefabsuploader.link.alreadyLinked = Your account is already linked. Use /prefabs-uploader import.
 prefabsuploader.link.hubError = Could not reach the hub. Make sure the Discord bot is online.
-prefabsuploader.import.useLink = Your account is not linked. Run /prefabs-uploader link first.
 
 # ---- pair-message + pairing confirmation ----
 prefabsuploader.command.config.pairMessage.description = Toggle the automatic pairing broadcast

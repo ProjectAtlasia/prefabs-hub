@@ -12,12 +12,16 @@ prefabsuploader.command.validate.description = Abre a UI de validação de prefa
 # ---- /prefabs-uploader import ----
 prefabsuploader.import.notplayer = Apenas jogadores podem usar /prefabs-uploader import.
 prefabsuploader.import.threadOpened = Abrimos uma thread privada no Discord pra você. Mande seu .prefab.json lá.
+prefabsuploader.import.dmOpened = Não consegui abrir uma thread (o dono do servidor precisa ajustar as permissões do bot). Te chamei na DM — mande seu .prefab.json por lá.
 prefabsuploader.import.hubError = Falha ao falar com o hub. Confira se o bot do Discord está online.
-prefabsuploader.import.needsLink = Vincule sua conta. No Discord, digite:
-prefabsuploader.import.needsLink.code = /link {code}
-prefabsuploader.import.needsLink.invitePrompt = Não está no servidor? Entre:
-prefabsuploader.import.needsLink.inviteButton = [ Discord ]
-prefabsuploader.import.needsLink.retry = Depois rode /prefabs-uploader import de novo.
+
+# ---- status do import/link (configuração/contato) ----
+prefabsuploader.status.notConfigured = Este servidor ainda não foi configurado no Discord. Avise um admin.
+prefabsuploader.status.noUploadsChannel = O canal de uploads não foi configurado. Avise um admin (/setup uploads).
+prefabsuploader.status.notInGuild = Você precisa estar no Discord do servidor pra enviar prefabs.
+prefabsuploader.status.inviteNotConfigured = Você precisa estar no Discord do servidor, mas o convite ainda não foi configurado. Avise um admin.
+prefabsuploader.status.joinPrompt = Entre aqui:
+prefabsuploader.status.contactFailed = Não consegui te contatar no Discord. Revise sua privacidade (permita DMs/threads do servidor) e tente de novo.
 
 # ---- /prefabs-uploader config setup ----
 prefabsuploader.config.setup.generating = Gerando código…
@@ -70,9 +74,9 @@ prefabsuploader.link.invitePrompt = Não está no servidor? Entre:
 prefabsuploader.link.inviteButton = [ Discord ]
 prefabsuploader.link.waiting = Aguardando você vincular no Discord (3 min)…
 prefabsuploader.link.linked = Conta vinculada! Discord: {discord}
+prefabsuploader.link.expired = Tempo esgotado. Rode /prefabs-uploader import de novo pra reenviar.
 prefabsuploader.link.alreadyLinked = Sua conta já está vinculada. Use /prefabs-uploader import.
 prefabsuploader.link.hubError = Falha ao falar com o hub. Confira se o bot do Discord está online.
-prefabsuploader.import.useLink = Sua conta não está vinculada. Rode /prefabs-uploader link primeiro.
 
 # ---- pair-message + confirmação de pareamento ----
 prefabsuploader.command.config.pairMessage.description = Liga/desliga o aviso automático de pareamento

@@ -71,6 +71,7 @@ public final class PluginConfig {
   private boolean hubInsecure;
   private String authToken;
   private boolean pairMessage;
+  private String inviteUrl;
 
   private PluginConfig(Path file) {
     this.file = file;
@@ -103,6 +104,7 @@ public final class PluginConfig {
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
       authToken = props.getProperty("auth.token", "");
       pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
+      inviteUrl = props.getProperty("discord.invite.url", "");
       documented = newExists && hasDocMarker();
     } else {
       serverId = "";
@@ -111,6 +113,7 @@ public final class PluginConfig {
       hubInsecure = false;
       authToken = "";
       pairMessage = true;
+      inviteUrl = "";
     }
 
     boolean fresh = serverId == null || serverId.isEmpty();
@@ -186,6 +189,13 @@ public final class PluginConfig {
     b.append("# The commands keep working normally (it only silences the broadcast).\n");
     b.append("pair.message=").append(pairMessage).append('\n');
     b.append("\n");
+    b.append("# Your Discord server invite, shown in-game so players can join (needed to link).\n");
+    b.append(
+        "# Optional: if you set it on Discord with /setup invite, that one wins; this is the\n");
+    b.append(
+        "# fallback used when no invite was configured on Discord. Example: https://discord.gg/abcd\n");
+    b.append("discord.invite.url=").append(inviteUrl == null ? "" : inviteUrl).append('\n');
+    b.append("\n");
     b.append("# Stable identity of this server (generated once -- do not change).\n");
     b.append("server.id=").append(serverId).append('\n');
     b.append("\n");
@@ -216,6 +226,14 @@ public final class PluginConfig {
 
   public boolean pairMessage() {
     return pairMessage;
+  }
+
+  /**
+   * Owner-configured Discord guild invite shown in-game. Used as a fallback when the hub did not
+   * provide one (i.e. {@code /setup invite} was not run); may be empty.
+   */
+  public String inviteUrl() {
+    return inviteUrl == null ? "" : inviteUrl;
   }
 
   /** Enables/disables the automatic pairing broadcast and persists the change. */
