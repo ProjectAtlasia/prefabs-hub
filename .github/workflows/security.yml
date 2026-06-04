@@ -105,10 +105,13 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # self-hosted runner can't reach GitHub's cache backend (request timeouts); disable it.
+          cache-disabled: true
       - name: Compile (Sonar reads bytecode for Java analysis)
         run: ./gradlew compileJava --no-daemon
       - name: SonarQube scan
-        uses: sonarsource/sonarqube-scan-action@v4
+        uses: sonarsource/sonarqube-scan-action@v6
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
