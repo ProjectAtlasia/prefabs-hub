@@ -42,10 +42,12 @@ public final class PluginConfig {
 
   private static final String DEFAULT_HUB;
   private static final boolean DEFAULT_TLS;
+  private static final boolean DEFAULT_ALLOW_INSECURE;
 
   static {
     String hub = "localhost:50051";
     boolean tls = false;
+    boolean allowInsecure = false;
     try (InputStream in =
         PluginConfig.class.getResourceAsStream("/prefabsuploader-build.properties")) {
       if (in != null) {
@@ -53,12 +55,16 @@ public final class PluginConfig {
         p.load(in);
         hub = p.getProperty("hub.default", hub);
         tls = Boolean.parseBoolean(p.getProperty("hub.tls", String.valueOf(tls)));
+        allowInsecure =
+            Boolean.parseBoolean(
+                p.getProperty("hub.insecure.allowed", String.valueOf(allowInsecure)));
       }
     } catch (IOException e) {
       LOG.at(Level.FINE).log("[PrefabsUploader] build defaults unavailable: %s", e.getMessage());
     }
     DEFAULT_HUB = hub;
     DEFAULT_TLS = tls;
+    DEFAULT_ALLOW_INSECURE = allowInsecure;
   }
 
   private static final String DOC_MARKER = "# PrefabsUploader config";
@@ -180,9 +186,9 @@ public final class PluginConfig {
     b.append("hub.tls=").append(hubTls).append('\n');
     b.append("\n");
     b.append(
-        "# hub.insecure=true: connects via TLS but does NOT validate the certificate (DEV only,\n");
+        "# hub.insecure=true: connects via TLS but does NOT validate the certificate (DEV builds\n");
     b.append(
-        "# with a self-signed/broken cert). Keep false in production. Only applies if hub.tls=true.\n");
+        "# only -- official/release builds ignore this and always validate). Needs hub.tls=true.\n");
     b.append("hub.insecure=").append(hubInsecure).append('\n');
     b.append("\n");
     b.append("# pair.message=false turns off the automatic chat prompt to pair the server.\n");
@@ -218,6 +224,16 @@ public final class PluginConfig {
 
   public boolean hubInsecure() {
     return hubInsecure;
+  }
+
+  /**
+   * Whether this build permits disabling TLS certificate validation ({@code hub.insecure=true}).
+   * Baked at build time: dev builds allow it for local testing against a self-signed hub, while
+   * official/release builds set it to {@code false} so the shipped jar always validates the hub
+   * certificate, regardless of {@code config.properties}.
+   */
+  public boolean insecureTlsAllowed() {
+    return DEFAULT_ALLOW_INSECURE;
   }
 
   public String authToken() {

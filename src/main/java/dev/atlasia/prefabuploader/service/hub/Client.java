@@ -192,8 +192,10 @@ public final class Client {
 
   /**
    * Applies the configured transport security to the channel builder: plaintext when TLS is off,
-   * standard TLS, or insecure TLS (no certificate validation — dev only). The channel closes when
-   * idle and gRPC reopens it transparently on the next RPC.
+   * standard validated TLS, or — only in dev builds that permit it ({@link
+   * PluginConfig#insecureTlsAllowed()}) — insecure TLS with no certificate validation. Official and
+   * release builds always validate the certificate even if {@code hub.insecure=true} is set. The
+   * channel closes when idle and gRPC reopens it transparently on the next RPC.
    */
   private void configureTransportSecurity(NettyChannelBuilder builder, String host)
       throws javax.net.ssl.SSLException {
@@ -201,14 +203,20 @@ public final class Client {
       builder.usePlaintext();
       return;
     }
-    if (!config.hubInsecure()) {
-      builder.useTransportSecurity().overrideAuthority(host);
+    if (config.hubInsecure() && config.insecureTlsAllowed()) {
+      var ssl =
+          GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+      builder.sslContext(ssl).overrideAuthority(host);
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] INSECURE TLS (no certificate validation) enabled -- dev build");
       return;
     }
-    var ssl =
-        GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
-    builder.sslContext(ssl).overrideAuthority(host);
-    LOG.at(Level.WARNING).log("[PrefabsUploader] INSECURE TLS (no certificate validation) enabled");
+    if (config.hubInsecure()) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] hub.insecure=true ignored: this build enforces TLS certificate"
+              + " validation. Use a dev build to disable it.");
+    }
+    builder.useTransportSecurity().overrideAuthority(host);
   }
 
   /**

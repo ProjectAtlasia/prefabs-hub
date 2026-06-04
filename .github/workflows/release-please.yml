@@ -57,7 +57,7 @@ jobs:
       - name: Build plugin jar (version comes from the bumped build.gradle.kts on master)
         run: >
           ./gradlew clean shadowJar
-          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true -PhubAllowInsecure=false
           -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
 
       - name: Locate jar
@@ -75,5 +75,5 @@ jobs:
         run: >
           ./gradlew publishCurseforge -PcfPublish
           -PcfChangelog=release-notes.md
-          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true -PhubAllowInsecure=false
           -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
