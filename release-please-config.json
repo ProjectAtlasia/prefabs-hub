@@ -7,7 +7,12 @@
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        { "type": "generic", "path": "build.gradle.kts" }
+        { "type": "generic", "path": "build.gradle.kts" },
+        { "type": "generic", "path": "settings.gradle.kts" },
+        {
+          "type": "generic",
+          "path": "src/main/java/dev/atlasia/prefabuploader/config/PluginConfig.java"
+        }
       ]
     }
   }
