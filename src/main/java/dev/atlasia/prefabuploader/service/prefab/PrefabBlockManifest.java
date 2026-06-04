@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
@@ -89,58 +90,51 @@ public final class PrefabBlockManifest {
     return entries;
   }
 
-  /**
-   * Builds the manifest entry for a block id, resolving its registry name.
-   *
-   * @param id the engine block id
-   * @param count how many times the block occurs in the selection
-   * @return the resolved entry, marked suspicious when unknown or matching a flagged token
-   */
+  /** Builds the manifest entry for a block id, resolving its registry name. */
   private static Entry blockEntry(int id, int count) {
-    boolean unknown = id == BlockType.UNKNOWN_ID;
-    String name = null;
-    if (!unknown) {
-      try {
-        BlockType type = BlockType.getAssetMap().getAsset(id);
-        if (type != null) {
-          name = type.getId();
-        }
-      } catch (RuntimeException e) {
-        LOG.at(Level.WARNING).log(
-            "[PrefabsUploader] failed to resolve block id %d: %s", id, e.getMessage());
-      }
+    String name =
+        id == BlockType.UNKNOWN_ID
+            ? null
+            : lookup(
+                id,
+                () -> {
+                  BlockType type = BlockType.getAssetMap().getAsset(id);
+                  return type == null ? null : type.getId();
+                });
+    return entry(id, count, false, name);
+  }
+
+  /** Builds the manifest entry for a fluid id, resolving its registry name. */
+  private static Entry fluidEntry(int id, int count) {
+    String name =
+        lookup(
+            id,
+            () -> {
+              Fluid fluid = Fluid.getAssetMap().getAsset(id);
+              return fluid == null ? null : fluid.getId();
+            });
+    return entry(id, count, true, name);
+  }
+
+  /** Runs a registry name lookup, returning {@code null} (and logging) on failure. */
+  private static String lookup(int id, Supplier<String> resolver) {
+    try {
+      return resolver.get();
+    } catch (RuntimeException e) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] failed to resolve id %d: %s", id, e.getMessage());
+      return null;
     }
-    if (name == null) {
-      unknown = true;
-      name = "unknown:" + id;
-    }
-    return new Entry(name, id, false, count, isSuspicious(name, false, unknown));
   }
 
   /**
-   * Builds the manifest entry for a fluid id, resolving its registry name.
-   *
-   * @param id the engine fluid id
-   * @param count how many times the fluid occurs in the selection
-   * @return the resolved entry; fluids are always marked suspicious (grief/lag vector)
+   * Assembles an {@link Entry} from a possibly-null resolved name, applying the {@code
+   * unknown:<id>} fallback and the suspicious heuristic.
    */
-  private static Entry fluidEntry(int id, int count) {
-    boolean unknown = false;
-    String name = null;
-    try {
-      Fluid fluid = Fluid.getAssetMap().getAsset(id);
-      if (fluid != null) {
-        name = fluid.getId();
-      }
-    } catch (RuntimeException e) {
-      LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] failed to resolve fluid id %d: %s", id, e.getMessage());
-    }
-    if (name == null) {
-      unknown = true;
-      name = "unknown:" + id;
-    }
-    return new Entry(name, id, true, count, isSuspicious(name, true, unknown));
+  private static Entry entry(int id, int count, boolean fluid, String resolved) {
+    boolean unknown = resolved == null;
+    String name = unknown ? "unknown:" + id : resolved;
+    return new Entry(name, id, fluid, count, isSuspicious(name, fluid, unknown));
   }
 
   /**

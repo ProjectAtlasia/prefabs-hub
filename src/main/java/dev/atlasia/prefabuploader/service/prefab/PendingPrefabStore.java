@@ -173,21 +173,22 @@ public final class PendingPrefabStore {
   private static Path resolveUniqueDest(Path liveRoot, String owner, String base)
       throws IOException {
     Path liveRootReal = liveRoot.toRealPath();
+    String stem = owner + "_" + base;
     for (int n = 1; n <= MAX_COLLISION_SUFFIX; n++) {
-      String name = (n == 1) ? owner + "_" + base : owner + "_" + base + "_" + n;
+      String name = (n == 1) ? stem : stem + "_" + n;
       Path dest = liveRoot.resolve(name + SUFFIX);
       String destName = dest.getFileName().toString();
       if (destName.contains("/") || destName.contains("\\") || destName.contains("..")) {
         throw new IOException("invalid destination name");
-      }
-      if (!dest.getParent().toRealPath().startsWith(liveRootReal)) {
-        throw new IOException("invalid destination (outside the prefabs tree)");
       }
       if (Files.exists(dest)) {
         continue;
       }
       if (Files.isSymbolicLink(dest)) {
         throw new IOException("destination is a symlink — refused");
+      }
+      if (!dest.getParent().toRealPath().startsWith(liveRootReal)) {
+        throw new IOException("invalid destination (outside the prefabs tree)");
       }
       return dest;
     }
