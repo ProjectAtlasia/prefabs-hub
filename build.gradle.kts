@@ -15,7 +15,7 @@ plugins {
 val grpcVersion = "1.71.0"
 val protobufVersion = "4.29.3"
 
-version = "0.1.0"
+version = "0.1.0" // x-release-please-version
 
 // Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
 val buildTime =

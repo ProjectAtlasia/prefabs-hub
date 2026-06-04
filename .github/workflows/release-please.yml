@@ -1,0 +1,73 @@
+name: release-please
+
+# Conventional-commit driven releases. On every push to master, release-please maintains a
+# "Release PR" that bumps the version (build.gradle.kts) and updates CHANGELOG.md. Merging that
+# Release PR creates the tag + GitHub release; the publish job then builds the jar, attaches it to
+# the release and publishes to CurseForge.
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # ── Build + publish (runs only when a release was just created by merging the Release PR) ──
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    environment: publish # manual approval before the external CurseForge publish
+    env:
+      CURSE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build metadata
+        id: meta
+        run: echo "time=$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: Latest changelog section (for CurseForge)
+        run: awk '/^## /{c++} c==1{print} c==2{exit}' CHANGELOG.md > release-notes.md || echo "Release ${{ needs.release-please.outputs.tag_name }}" > release-notes.md
+
+      - name: Build plugin jar (version comes from the bumped build.gradle.kts)
+        run: >
+          ./gradlew clean shadowJar
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true
+          -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
+
+      - name: Locate jar
+        id: jar
+        run: echo "path=$(ls build/libs/prefabs-hub-*.jar)" >> "$GITHUB_OUTPUT"
+
+      - name: Attach jar to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: ${{ steps.jar.outputs.path }}
+
+      - name: Publish to CurseForge
+        if: env.CURSE_TOKEN != ''
+        run: >
+          ./gradlew publishCurseforge -PcfPublish
+          -PcfChangelog=release-notes.md
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true
+          -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
