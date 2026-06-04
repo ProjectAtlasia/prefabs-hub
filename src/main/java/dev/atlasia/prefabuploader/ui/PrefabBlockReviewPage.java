@@ -27,11 +27,13 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.prefab.selection.standard.BlockSelection;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
@@ -120,6 +122,8 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
     }
     ev.addEventBinding(
         CustomUIEventBindingType.Activating, "#Confirm", EventData.of("Action", "Confirm"));
+    ev.addEventBinding(
+        CustomUIEventBindingType.Activating, "#Back", EventData.of("Action", "Back"));
 
     ensureLoaded();
     ui.set("#PrefabName.TextSpans", Message.raw(sanitize(pending.prefabName())));
@@ -153,6 +157,10 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
     }
     if ("Confirm".equals(a)) {
       handleConfirm();
+      return;
+    }
+    if ("Back".equals(a)) {
+      reopenValidation();
       return;
     }
     sendUpdate();
@@ -213,8 +221,6 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
       return;
     }
     done = true;
-    final int total = entries.size();
-    final int keptF = kept;
     final String adminName = playerRef.getUsername();
     final String adminUuid = String.valueOf(playerRef.getUuid());
 
@@ -254,20 +260,13 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
                       resp.getError());
                 }
                 runOnWorld(
-                    () -> {
-                      UICommandBuilder b = new UICommandBuilder();
-                      b.set(
-                          "#Summary.TextSpans",
-                          Message.translation("server.prefabsuploader.blockreview.approved")
-                              .param("kept", keptF)
-                              .param("total", total));
-                      b.set("#Confirm.Disabled", true);
-                      sendUpdate(b, false);
-                      playerRef.sendMessage(
-                          tagged(
-                              Message.translation("server.prefabsuploader.blockreview.approvedChat")
-                                  .param("name", sanitize(pending.prefabName()))));
-                    });
+                    () ->
+                        playerRef.sendMessage(
+                            tagged(
+                                Message.translation(
+                                        "server.prefabsuploader.blockreview.approvedChat")
+                                    .param("name", sanitize(pending.prefabName())))));
+                reopenValidation();
               } catch (Throwable t) {
                 done = false;
                 final String reason = causeMessage(t);
@@ -292,6 +291,45 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
     populateList(b);
     updateSummary(b);
     sendUpdate(b, false);
+  }
+
+  /** Reloads the pending list from the hub and returns to the validation page. */
+  private void reopenValidation() {
+    hubClient
+        .io()
+        .execute(
+            () -> {
+              List<PendingPrefab> items;
+              try {
+                items =
+                    hubClient.listPending().getItemsList().stream()
+                        .map(PendingPrefab::fromProto)
+                        .toList();
+              } catch (Throwable t) {
+                LOG.at(Level.WARNING).log(
+                    "[PrefabsUploader] failed to reload pending list: %s", t.getMessage());
+                items = List.of();
+              }
+              final List<PendingPrefab> finalItems = items;
+              runOnWorld(() -> openValidationPage(finalItems));
+            });
+  }
+
+  /** Opens the validation list page on the world thread. */
+  private void openValidationPage(List<PendingPrefab> items) {
+    World w = world();
+    if (w == null) {
+      return;
+    }
+    var store = w.getEntityStore().getStore();
+    Player player = store.getComponent(playerRef.getReference(), Player.getComponentType());
+    if (player == null) {
+      return;
+    }
+    player
+        .getPageManager()
+        .openCustomPage(
+            playerRef.getReference(), store, new PrefabValidationPage(playerRef, hubClient, items));
   }
 
   /** Renders the current page of block rows (state glyph, name, count). */
