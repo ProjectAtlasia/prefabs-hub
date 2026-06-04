@@ -70,6 +70,7 @@ public final class PluginConfig {
   private boolean hubTls;
   private boolean hubInsecure;
   private String authToken;
+  private boolean pairMessage;
 
   private PluginConfig(Path file) {
     this.file = file;
@@ -101,6 +102,7 @@ public final class PluginConfig {
       hubTls = Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(DEFAULT_TLS)));
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
       authToken = props.getProperty("auth.token", "");
+      pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
       documented = newExists && hasDocMarker();
     } else {
       serverId = "";
@@ -108,6 +110,7 @@ public final class PluginConfig {
       hubTls = DEFAULT_TLS;
       hubInsecure = false;
       authToken = "";
+      pairMessage = true;
     }
 
     boolean fresh = serverId == null || serverId.isEmpty();
@@ -180,6 +183,10 @@ public final class PluginConfig {
         "# self-signed/quebrado). Mantenha false em producao. So tem efeito se hub.tls=true.\n");
     b.append("hub.insecure=").append(hubInsecure).append('\n');
     b.append("\n");
+    b.append("# pair.message=false desliga o aviso automatico no chat pra parear o servidor.\n");
+    b.append("# Os comandos continuam funcionando normalmente (so silencia o broadcast).\n");
+    b.append("pair.message=").append(pairMessage).append('\n');
+    b.append("\n");
     b.append("# Identidade estavel deste servidor (gerada uma vez -- nao alterar).\n");
     b.append("server.id=").append(serverId).append('\n');
     b.append("\n");
@@ -207,6 +214,19 @@ public final class PluginConfig {
 
   public String authToken() {
     return authToken;
+  }
+
+  public boolean pairMessage() {
+    return pairMessage;
+  }
+
+  /** Enables/disables the automatic pairing broadcast and persists the change. */
+  public synchronized void setPairMessage(boolean enabled) {
+    if (this.pairMessage == enabled) {
+      return;
+    }
+    this.pairMessage = enabled;
+    write();
   }
 
   /** Persists a new auth token received during pairing, rewriting the commented file. */
