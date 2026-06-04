@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.prefab;
+package dev.atlasia.prefabuploader.service.prefab;
 
 import dev.atlasia.prefabuploader.grpc.PendingItem;
 

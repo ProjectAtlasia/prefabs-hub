@@ -36,11 +36,11 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * {@code /prefabs-uploader import} — per-player prefab upload flow. Asks the hub: if the account is
- * not linked, runs the link flow; if it is, the hub opens a private Discord thread (or a DM
- * fallback when the bot lacks thread permissions).
+ * {@code /prefabs-uploader link} — links the player's Hytale account to Discord. If unlinked, shows
+ * the link code and opens a short window that confirms in-game once the Discord {@code /link}
+ * completes. Player-facing (no admin permission).
  */
-public class ImportCommand extends AbstractCommand {
+public class LinkCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
@@ -49,19 +49,19 @@ public class ImportCommand extends AbstractCommand {
   private final PluginConfig config;
   private final LinkFlow linkFlow;
 
-  public ImportCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
-    super("import", "server.prefabsuploader.command.import.description");
+  public LinkCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
+    super("link", "server.prefabsuploader.command.link.description");
     this.client = client;
     this.config = config;
     this.linkFlow = new LinkFlow(client, config);
-    requirePermission("projectatlasia.prefabsuploader.command.import");
+    requirePermission("projectatlasia.prefabsuploader.command.link");
   }
 
   @Nullable
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext context) {
     if (!context.isPlayer()) {
-      context.sendMessage(Message.translation("server.prefabsuploader.import.notplayer"));
+      context.sendMessage(Message.translation("server.prefabsuploader.link.notplayer"));
       return CompletableFuture.completedFuture(null);
     }
     PlayerRef sender = context.senderAs(PlayerRef.class);
@@ -75,18 +75,16 @@ public class ImportCommand extends AbstractCommand {
             PlayerImportResponse res = client.playerImport(uuid, username);
             switch (res.getStatus()) {
               case NEEDS_LINK -> linkFlow.start(context, sender, uuid, res);
-              case THREAD_OPENED ->
+              case THREAD_OPENED, DM_OPENED ->
                   context.sendMessage(
-                      tagged(Message.translation("server.prefabsuploader.import.threadOpened")));
-              case DM_OPENED ->
-                  context.sendMessage(
-                      tagged(Message.translation("server.prefabsuploader.import.dmOpened")));
+                      tagged(Message.translation("server.prefabsuploader.link.alreadyLinked")));
               default -> StatusReply.send(context, res, config.inviteUrl());
             }
           } catch (Throwable t) {
-            LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport failed: %s", t.getMessage());
+            LOG.at(Level.WARNING).log(
+                "[PrefabsUploader] link/playerImport failed: %s", t.getMessage());
             context.sendMessage(
-                tagged(Message.translation("server.prefabsuploader.import.hubError")));
+                tagged(Message.translation("server.prefabsuploader.link.hubError")));
           }
         });
   }

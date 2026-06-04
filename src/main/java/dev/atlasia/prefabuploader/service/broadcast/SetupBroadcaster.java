@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,12 +16,14 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.broadcast;
+package dev.atlasia.prefabuploader.service.broadcast;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.universe.Universe;
-import dev.atlasia.prefabuploader.client.HubClient;
+import dev.atlasia.prefabuploader.config.PluginConfig;
+import dev.atlasia.prefabuploader.service.hub.Client;
+import java.awt.Color;
 import java.util.logging.Level;
 
 /**
@@ -33,15 +35,17 @@ public final class SetupBroadcaster {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long INTERVAL_MS = 60_000;
 
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
-  private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
+  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
-  private final HubClient client;
+  private final Client client;
+  private final PluginConfig config;
   private Thread thread;
   private volatile boolean running = false;
 
-  public SetupBroadcaster(HubClient client) {
+  public SetupBroadcaster(Client client, PluginConfig config) {
     this.client = client;
+    this.config = config;
   }
 
   public void start() {
@@ -58,6 +62,9 @@ public final class SetupBroadcaster {
                   if (!running) {
                     break;
                   }
+                  if (!config.pairMessage()) {
+                    continue;
+                  }
                   if (client.isConfigured()) {
                     continue;
                   }
@@ -65,13 +72,13 @@ public final class SetupBroadcaster {
                     continue;
                   }
                   Universe.get().sendMessage(buildMessage());
-                  LOG.at(Level.INFO).log("[PrefabsUploader] broadcast de setup enviado");
+                  LOG.at(Level.INFO).log("[PrefabsUploader] setup broadcast sent");
                 } catch (InterruptedException e) {
                   Thread.currentThread().interrupt();
                   break;
                 } catch (Throwable t) {
                   LOG.at(Level.WARNING).log(
-                      "[PrefabsUploader] broadcast falhou: %s", t.getMessage());
+                      "[PrefabsUploader] broadcast failed: %s", t.getMessage());
                 }
               }
             },
@@ -79,7 +86,7 @@ public final class SetupBroadcaster {
     thread.setDaemon(true);
     thread.start();
     LOG.at(Level.INFO).log(
-        "[PrefabsUploader] broadcaster iniciado (intervalo %ds)", INTERVAL_MS / 1000);
+        "[PrefabsUploader] broadcaster started (interval %ds)", INTERVAL_MS / 1000);
   }
 
   private Message buildMessage() {

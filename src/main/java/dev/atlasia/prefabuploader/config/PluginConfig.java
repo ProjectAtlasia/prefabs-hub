@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -40,7 +40,27 @@ public final class PluginConfig {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   public static final String PLUGIN_VERSION = "0.1.0";
 
-  private static final String DEFAULT_HUB = BuildDefaults.HUB_ADDRESS;
+  private static final String DEFAULT_HUB;
+  private static final boolean DEFAULT_TLS;
+
+  static {
+    String hub = "localhost:50051";
+    boolean tls = false;
+    try (InputStream in =
+        PluginConfig.class.getResourceAsStream("/prefabsuploader-build.properties")) {
+      if (in != null) {
+        Properties p = new Properties();
+        p.load(in);
+        hub = p.getProperty("hub.default", hub);
+        tls = Boolean.parseBoolean(p.getProperty("hub.tls", String.valueOf(tls)));
+      }
+    } catch (IOException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] build defaults unavailable: %s", e.getMessage());
+    }
+    DEFAULT_HUB = hub;
+    DEFAULT_TLS = tls;
+  }
+
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
   private final Path file;
@@ -50,6 +70,8 @@ public final class PluginConfig {
   private boolean hubTls;
   private boolean hubInsecure;
   private String authToken;
+  private boolean pairMessage;
+  private String inviteUrl;
 
   private PluginConfig(Path file) {
     this.file = file;
@@ -74,33 +96,36 @@ public final class PluginConfig {
       try (InputStream in = Files.newInputStream(source)) {
         props.load(in);
       } catch (IOException e) {
-        LOG.at(Level.WARNING).log("[PrefabsUploader] falha ao ler config: %s", e.getMessage());
+        LOG.at(Level.WARNING).log("[PrefabsUploader] failed to read config: %s", e.getMessage());
       }
       serverId = props.getProperty("server.id", "");
       hubAddress = props.getProperty("hub.address", DEFAULT_HUB);
-      hubTls =
-          Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(BuildDefaults.HUB_TLS)));
+      hubTls = Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(DEFAULT_TLS)));
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
       authToken = props.getProperty("auth.token", "");
+      pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
+      inviteUrl = props.getProperty("discord.invite.url", "");
       documented = newExists && hasDocMarker();
     } else {
       serverId = "";
       hubAddress = DEFAULT_HUB;
-      hubTls = BuildDefaults.HUB_TLS;
+      hubTls = DEFAULT_TLS;
       hubInsecure = false;
       authToken = "";
+      pairMessage = true;
+      inviteUrl = "";
     }
 
     boolean fresh = serverId == null || serverId.isEmpty();
     if (fresh) {
       serverId = UUID.randomUUID().toString();
-      LOG.at(Level.INFO).log("[PrefabsUploader] novo server.id gerado: %s", serverId);
+      LOG.at(Level.INFO).log("[PrefabsUploader] new server.id generated: %s", serverId);
     }
     if (fresh || migrate || !documented) {
       write();
     }
     if (migrate) {
-      LOG.at(Level.INFO).log("[PrefabsUploader] config migrada de %s para %s", legacy, file);
+      LOG.at(Level.INFO).log("[PrefabsUploader] config migrated from %s to %s", legacy, file);
       try {
         Files.deleteIfExists(legacy);
       } catch (IOException ignored) {
@@ -129,11 +154,10 @@ public final class PluginConfig {
       } catch (UnsupportedOperationException ignored) {
       } catch (IOException e) {
         LOG.at(Level.WARNING).log(
-            "[PrefabsUploader] não foi possível restringir permissões da config: %s",
-            e.getMessage());
+            "[PrefabsUploader] could not restrict config permissions: %s", e.getMessage());
       }
     } catch (IOException e) {
-      LOG.at(Level.SEVERE).log("[PrefabsUploader] falha ao salvar config: %s", e.getMessage());
+      LOG.at(Level.SEVERE).log("[PrefabsUploader] failed to save config: %s", e.getMessage());
     }
   }
 
@@ -141,31 +165,41 @@ public final class PluginConfig {
   private String render() {
     StringBuilder b = new StringBuilder();
     b.append(DOC_MARKER)
-        .append(" -- NAO compartilhe (o auth.token autentica seu servidor no hub).\n");
-    b.append("# Editou algum valor? Reinicie o servidor (Hytale nao tem hot-reload).\n");
+        .append(" -- do NOT share (auth.token authenticates your server with the hub).\n");
+    b.append("# Changed a value? Restart the server (Hytale has no hot-reload).\n");
     b.append("#\n");
     b.append("# ===========================================================================\n");
-    b.append("#  HUB gRPC -- para onde o plugin conecta. APONTE A URL AQUI.\n");
+    b.append("#  gRPC HUB -- where the plugin connects. SET THE URL HERE.\n");
     b.append("# ===========================================================================\n");
-    b.append("#  Producao:    seu-hub.exemplo.com:443   (hub.tls=true,  hub.insecure=false)\n");
-    b.append("#  Teste local: localhost:50051           (hub.tls=false, hub.insecure=false)\n");
+    b.append("#  Production:  your-hub.example.com:443   (hub.tls=true,  hub.insecure=false)\n");
+    b.append("#  Local test:  localhost:50051           (hub.tls=false, hub.insecure=false)\n");
     b.append("hub.address=").append(hubAddress).append('\n');
     b.append("\n");
-    b.append("# TLS na conexao com o hub: true em producao (porta 443, atras do proxy);\n");
-    b.append("# false pra um bot LOCAL em plaintext (ex.: localhost:50051).\n");
+    b.append("# TLS on the hub connection: true in production (port 443, behind the proxy);\n");
+    b.append("# false for a LOCAL bot in plaintext (e.g. localhost:50051).\n");
     b.append("hub.tls=").append(hubTls).append('\n');
     b.append("\n");
     b.append(
-        "# hub.insecure=true: conecta via TLS mas NAO valida o certificado (so DEV, com cert\n");
+        "# hub.insecure=true: connects via TLS but does NOT validate the certificate (DEV only,\n");
     b.append(
-        "# self-signed/quebrado). Mantenha false em producao. So tem efeito se hub.tls=true.\n");
+        "# with a self-signed/broken cert). Keep false in production. Only applies if hub.tls=true.\n");
     b.append("hub.insecure=").append(hubInsecure).append('\n');
     b.append("\n");
-    b.append("# Identidade estavel deste servidor (gerada uma vez -- nao alterar).\n");
+    b.append("# pair.message=false turns off the automatic chat prompt to pair the server.\n");
+    b.append("# The commands keep working normally (it only silences the broadcast).\n");
+    b.append("pair.message=").append(pairMessage).append('\n');
+    b.append("\n");
+    b.append("# Your Discord server invite, shown in-game so players can join (needed to link).\n");
+    b.append(
+        "# Optional: if you set it on Discord with /setup invite, that one wins; this is the\n");
+    b.append(
+        "# fallback used when no invite was configured on Discord. Example: https://discord.gg/abcd\n");
+    b.append("discord.invite.url=").append(inviteUrl == null ? "" : inviteUrl).append('\n');
+    b.append("\n");
+    b.append("# Stable identity of this server (generated once -- do not change).\n");
     b.append("server.id=").append(serverId).append('\n');
     b.append("\n");
-    b.append(
-        "# Token emitido no pareamento (/setup). Preenchido automaticamente. NAO compartilhe.\n");
+    b.append("# Token issued during pairing (/setup). Filled in automatically. Do NOT share.\n");
     b.append("auth.token=").append(authToken == null ? "" : authToken).append('\n');
     return b.toString();
   }
@@ -188,6 +222,27 @@ public final class PluginConfig {
 
   public String authToken() {
     return authToken;
+  }
+
+  public boolean pairMessage() {
+    return pairMessage;
+  }
+
+  /**
+   * Owner-configured Discord guild invite shown in-game. Used as a fallback when the hub did not
+   * provide one (i.e. {@code /setup invite} was not run); may be empty.
+   */
+  public String inviteUrl() {
+    return inviteUrl == null ? "" : inviteUrl;
+  }
+
+  /** Enables/disables the automatic pairing broadcast and persists the change. */
+  public synchronized void setPairMessage(boolean enabled) {
+    if (this.pairMessage == enabled) {
+      return;
+    }
+    this.pairMessage = enabled;
+    write();
   }
 
   /** Persists a new auth token received during pairing, rewriting the commented file. */

@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.prefab;
+package dev.atlasia.prefabuploader.service.prefab;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -53,7 +53,7 @@ public final class PlayerNameCache {
         props.load(in);
       } catch (IOException e) {
         LOG.at(Level.WARNING).log(
-            "[PrefabsUploader] falha ao ler cache de nomes: %s", e.getMessage());
+            "[PrefabsUploader] failed to read name cache: %s", e.getMessage());
       }
     }
   }
@@ -101,7 +101,7 @@ public final class PlayerNameCache {
         }
       }
     } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] resolve nome %s falhou: %s", uuid, t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] name resolve %s failed: %s", uuid, t.getMessage());
     }
     return null;
   }
@@ -111,12 +111,11 @@ public final class PlayerNameCache {
       Files.createDirectories(file.getParent());
       Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
       try (OutputStream out = Files.newOutputStream(tmp)) {
-        props.store(out, "PrefabsUploader — cache UUID->username (gerado, nao editar)");
+        props.store(out, "PrefabsUploader — UUID->username cache (generated, do not edit)");
       }
       Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
-      LOG.at(Level.SEVERE).log(
-          "[PrefabsUploader] falha ao salvar cache de nomes: %s", e.getMessage());
+      LOG.at(Level.SEVERE).log("[PrefabsUploader] failed to save name cache: %s", e.getMessage());
     }
   }
 }

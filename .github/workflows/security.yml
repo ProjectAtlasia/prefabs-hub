@@ -1,0 +1,117 @@
+name: validate
+
+# PR gate for develop -> master: builds the jar and runs the scanners. When these checks pass
+# (enforce via branch protection on master), the PR can be merged; the push to master then runs
+# release.yml (publish gated by manual approval). Also runs on develop pushes for early feedback.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # upload SARIF to GitHub code scanning (public repo)
+
+jobs:
+  # ── Build + format/compile verification (gates the merge) ──
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build + verify
+        run: ./gradlew clean compileJava spotlessCheck shadowJar --no-daemon
+
+  # ── Trivy: dep CVEs, misconfig, secrets ──
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  # ── OWASP Dependency-Check (Java deps → CVEs) ──
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build fat jar (bundles deps so Dependency-Check can scan them)
+        run: ./gradlew shadowJar --no-daemon
+      - name: Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        env:
+          # setup-java sets JAVA_HOME to a host path that doesn't exist inside the action's
+          # container. Per the action's README, point it at the JDK bundled in the Depcheck image.
+          JAVA_HOME: /opt/jdk
+        with:
+          project: prefabs-uploader-plugin
+          path: build/libs
+          format: "SARIF"
+          # NVD API key is optional; only pass the flag when the secret is set (an empty
+          # --nvdApiKey makes the CLI error out). Without a key the NVD update is just slower.
+          # --disableCentral: Maven Central's anonymous search API now returns 403 and the Central
+          # analyzer treats that as fatal. Vuln detection still works from the jar's embedded
+          # coordinates matched against the NVD.
+          args: >-
+            --failOnCVSS 8 --disableCentral
+            ${{ secrets.NVD_API_KEY != '' && format('--nvdApiKey {0}', secrets.NVD_API_KEY) || '' }}
+      - name: Upload Dependency-Check SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: dependency-check
+
+  # ── SonarQube (Community, self-hosted) — opt-in via SONAR_ENABLED ──
+  # Runs on the internal self-hosted runner (reaches the LAN SonarQube). SECURITY: this repo is
+  # PUBLIC, so it must NEVER run untrusted fork-PR code on our infra — gated to develop pushes and
+  # same-repo (non-fork) PRs only.
+  sonar:
+    runs-on: [self-hosted, atlasia]
+    if: >-
+      vars.SONAR_ENABLED == 'true' &&
+      (github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # self-hosted runner can't reach GitHub's cache backend (request timeouts); disable it.
+          cache-disabled: true
+      - name: Compile (Sonar reads bytecode for Java analysis)
+        run: ./gradlew compileJava --no-daemon
+      - name: SonarQube scan
+        uses: sonarsource/sonarqube-scan-action@v6
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

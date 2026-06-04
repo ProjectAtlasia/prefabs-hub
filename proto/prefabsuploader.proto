@@ -65,7 +65,16 @@ message HubMessage {
   oneof payload {
     ConfigState config_state = 1;
     PrefabPush prefab_push = 2;
+    PlayerLinked player_linked = 3;
   }
+}
+
+// Sent on the (windowed) stream when a player completes the Discord link, so the plugin can confirm
+// it in-game to that player. The plugin matches by player_uuid against its open link windows.
+message PlayerLinked {
+  string player_uuid = 1;
+  string player_name = 2;    // in-game name from the link
+  string discord_name = 3;   // Discord username, for the in-game confirmation message
 }
 
 // Server configuration state, sent after Register and on every change.
@@ -78,6 +87,8 @@ message ConfigState {
   string channel_id = 5;
   // Issued at pairing; the plugin persists it and resends it in Register on reconnect.
   string auth_token = 6;
+  // Owner-configured Discord guild invite (for the in-game broadcast / join prompts); may be empty.
+  string guild_invite_url = 7;
 }
 
 // A prefab uploaded via Discord, pushed to the plugin.
@@ -128,6 +139,10 @@ message PlayerImportResponse {
     NO_UPLOADS_CHANNEL = 4;
     // Server not paired with Discord.
     NOT_CONFIGURED = 5;
+    // Thread could not be opened (missing bot permissions); a DM was opened instead.
+    DM_OPENED = 6;
+    // Could not reach the player at all (no thread, no DM) — ask them to review privacy settings.
+    CONTACT_FAILED = 7;
   }
   Status status = 1;
   // Populated when status=NEEDS_LINK.
@@ -135,8 +150,10 @@ message PlayerImportResponse {
   int64 expires_at_ms = 3;
   // Text ready to display in-game.
   string message = 4;
-  // Bot link, useful for NEEDS_LINK/NOT_IN_GUILD.
+  // Bot install link, useful for NOT_CONFIGURED.
   string bot_invite_url = 5;
+  // Owner-configured Discord guild invite, used to ask the player to join (NEEDS_LINK/NOT_IN_GUILD).
+  string guild_invite_url = 6;
 }
 
 message ListPendingRequest {

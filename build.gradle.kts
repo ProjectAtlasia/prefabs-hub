@@ -8,12 +8,14 @@ plugins {
     id("com.google.protobuf") version "0.9.4"
     // Shadow 9.x ships ASM that reads Java 25 bytecode (major 69); 8.x fails here.
     id("com.gradleup.shadow") version "9.4.2"
+    // Publishes the jar to CurseForge (supports Hytale; resolves game versions by name).
+    id("com.hypherionmc.modutils.modpublisher") version "2.2.1"
 }
 
 val grpcVersion = "1.71.0"
 val protobufVersion = "4.29.3"
 
-version = "0.1.0"
+version = "0.1.0" // x-release-please-version
 
 // Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
 val buildTime =
@@ -26,7 +28,7 @@ spotless {
         licenseHeader(
             """
             /*
-             * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+             * PrefabsUploader — sends a player's local prefabs to the Hytale server.
              * Copyright (C) 2026 ProjectAtlasia
              *
              * This program is free software: you can redistribute it and/or modify
@@ -80,26 +82,21 @@ sourceSets {
 // -PhubDefault=host:port -PhubTlsDefault=true; the committed source stays generic (localhost).
 val hubDefault = (findProperty("hubDefault") as String?) ?: "localhost:50051"
 val hubTlsDefault = (findProperty("hubTlsDefault") as String?)?.toBoolean() ?: false
-val generatedSrcDir = layout.buildDirectory.dir("generated/sources/builddefaults")
-val generateBuildDefaults by tasks.registering {
+// Gera um RECURSO (não uma classe) lido pelo PluginConfig em runtime. Assim o .java compila sozinho
+// na IDE (sem depender de código gerado) e o build oficial ainda injeta o hub de produção.
+val generatedResDir = layout.buildDirectory.dir("generated/resources/builddefaults")
+val generateBuildResource by tasks.registering {
     inputs.property("hubDefault", hubDefault)
     inputs.property("hubTlsDefault", hubTlsDefault)
-    outputs.dir(generatedSrcDir)
+    outputs.dir(generatedResDir)
     doLast {
-        val pkg = generatedSrcDir.get().dir("dev/atlasia/prefabuploader/config").asFile
-        pkg.mkdirs()
-        pkg.resolve("BuildDefaults.java").writeText(
-            "package dev.atlasia.prefabuploader.config;\n\n" +
-                "final class BuildDefaults {\n" +
-                "  static final String HUB_ADDRESS = \"$hubDefault\";\n" +
-                "  static final boolean HUB_TLS = $hubTlsDefault;\n\n" +
-                "  private BuildDefaults() {}\n" +
-                "}\n",
-        )
+        val f = generatedResDir.get().file("prefabsuploader-build.properties").asFile
+        f.parentFile.mkdirs()
+        f.writeText("hub.default=$hubDefault\nhub.tls=$hubTlsDefault\n")
     }
 }
-sourceSets.named("main") { java.srcDir(generatedSrcDir) }
-tasks.named("compileJava") { dependsOn(generateBuildDefaults) }
+sourceSets.named("main") { resources.srcDir(generateBuildResource) }
+tasks.named("processResources") { dependsOn(generateBuildResource) }
 
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:$protobufVersion" }
@@ -145,3 +142,26 @@ tasks.shadowJar {
 tasks.named("build") {
     dependsOn(tasks.shadowJar)
 }
+
+// Publicação no CurseForge (Hytale). Debug por padrão (NÃO sobe nada); -PcfPublish faz o upload real.
+// O token vem do env CURSE_TOKEN (secret no CI). modpublisher resolve "0.5" → ID e mira o endpoint Hytale.
+publisher {
+    apiKeys {
+        curseforge(System.getenv("CURSE_TOKEN") ?: "")
+    }
+    gameType.set("hytale")
+    debug.set(!project.hasProperty("cfPublish"))
+    curseID.set("1563303")
+    versionType.set("release")
+    projectVersion.set("${project.version}-$buildTime")
+    displayName.set("prefabs-hub v${project.version} ($buildTime)")
+    // -PcfChangelog pode ser um caminho de arquivo (lido) ou texto literal.
+    changelog.set(
+        (findProperty("cfChangelog") as String?)?.let { if (file(it).exists()) file(it).readText() else it }
+            ?: "Automated release — see https://github.com/ProjectAtlasia/prefabs-hub/releases",
+    )
+    setGameVersions("0.5")
+    artifact.set("build/libs/prefabs-hub-${project.version}-$buildTime.jar")
+}
+
+tasks.named("publishCurseforge") { dependsOn("shadowJar") }

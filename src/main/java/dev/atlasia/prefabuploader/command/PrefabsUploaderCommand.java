@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,17 +19,19 @@
 package dev.atlasia.prefabuploader.command;
 
 import com.hypixel.hytale.server.core.command.system.basecommands.AbstractCommandCollection;
-import dev.atlasia.prefabuploader.client.HubClient;
+import dev.atlasia.prefabuploader.config.PluginConfig;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import javax.annotation.Nonnull;
 
 /** Root command {@code /prefabs-uploader}, with aliases {@code prefabsuploader} and {@code pu}. */
 public class PrefabsUploaderCommand extends AbstractCommandCollection {
 
-  public PrefabsUploaderCommand(@Nonnull HubClient client) {
+  public PrefabsUploaderCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
     super("prefabsuploader", "server.prefabsuploader.command.root.description");
     addAliases("prefabs-uploader", "pu");
-    addSubCommand(new ConfigCommand(client));
-    addSubCommand(new ImportCommand(client));
+    addSubCommand(new ConfigCommand(client, config));
+    addSubCommand(new ImportCommand(client, config));
     addSubCommand(new ValidateCommand(client));
+    addSubCommand(new LinkCommand(client, config));
   }
 }
