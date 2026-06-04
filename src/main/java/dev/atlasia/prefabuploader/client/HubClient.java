@@ -23,12 +23,12 @@ import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.ConfigState;
 import dev.atlasia.prefabuploader.grpc.GetPendingRequest;
 import dev.atlasia.prefabuploader.grpc.GetPendingResponse;
-import dev.atlasia.prefabuploader.grpc.Heartbeat;
 import dev.atlasia.prefabuploader.grpc.HubMessage;
 import dev.atlasia.prefabuploader.grpc.ListPendingRequest;
 import dev.atlasia.prefabuploader.grpc.ListPendingResponse;
 import dev.atlasia.prefabuploader.grpc.PlayerImportRequest;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
+import dev.atlasia.prefabuploader.grpc.PlayerLinked;
 import dev.atlasia.prefabuploader.grpc.PluginMessage;
 import dev.atlasia.prefabuploader.grpc.PrefabsUploaderGrpc;
 import dev.atlasia.prefabuploader.grpc.Register;
@@ -54,18 +54,25 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * gRPC client for the plugin: maintains the bidirectional {@code Connect} stream with the hub
- * (config/heartbeat) and reconnects with backoff, exposes the unary RPCs ({@code RequestSetup},
- * {@code PlayerImport}, {@code ListPending}/{@code GetPending}/{@code ResolvePending}), and
- * downloads directly from the Discord CDN.
+ * gRPC client for the plugin (lazy, windowed connections). There is no permanent {@code Connect}
+ * stream: the channel uses an idle timeout so the transport closes when no RPC runs, and the unary
+ * RPCs ({@code RequestSetup}, {@code PlayerImport}, {@code ListPending}/{@code GetPending}/ {@code
+ * ResolvePending}) run on demand. The {@code Connect} stream is only opened briefly — at boot to
+ * fetch the initial {@link ConfigState}, and inside short listening windows (setup/link) that wait
+ * for hub events. Also downloads directly from the Discord CDN.
  */
 public final class HubClient {
 
@@ -75,13 +82,21 @@ public final class HubClient {
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
   private static final int CDN_MAX_BYTES =
       dev.atlasia.prefabuploader.prefab.PrefabValidator.MAX_BYTES;
-  private static final long HEARTBEAT_SEC = 30;
-  private static final long BACKOFF_MIN_SEC = 2;
-  private static final long BACKOFF_MAX_SEC = 60;
+
+  /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
+  private static final long IDLE_TIMEOUT_SEC = 30;
+
+  private static final long BOOT_BACKOFF_MIN_SEC = 2;
+  private static final long BOOT_BACKOFF_MAX_SEC = 60;
+
+  /** How long the boot stream stays open to receive the initial ConfigState before closing. */
+  private static final long BOOT_WINDOW_SEC = 10;
 
   private static final long AUTH_POLL_SEC = 2;
   private static final long MAX_AUTH_WAIT_SEC = 60;
   private long authWaitedSec = 0;
+  private long bootBackoffSec = BOOT_BACKOFF_MIN_SEC;
+  private volatile boolean bootDone = false;
 
   private static final Metadata.Key<String> AUTHORIZATION =
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
@@ -112,11 +127,19 @@ public final class HubClient {
 
   private volatile HttpClient httpClient;
 
-  private final AtomicReference<StreamObserver<PluginMessage>> outbound = new AtomicReference<>();
+  // Shared windowed stream. Guarded by streamLock for open/close transitions.
+  private final Object streamLock = new Object();
   private final Object sendLock = new Object();
+  private StreamObserver<PluginMessage> outbound;
+  private int activeWindows = 0;
+
+  // Live waiters dispatched from the stream observer.
+  // configuredWaiters fire on ConfigState(configured=true); stateWaiters fire on ANY ConfigState.
+  private final List<Runnable> configuredWaiters = new CopyOnWriteArrayList<>();
+  private final List<Runnable> stateWaiters = new CopyOnWriteArrayList<>();
+  private final List<Consumer<PlayerLinked>> linkWaiters = new CopyOnWriteArrayList<>();
 
   private volatile boolean running = false;
-  private volatile long backoffSec = BACKOFF_MIN_SEC;
 
   private final AtomicReference<HubState> state = new AtomicReference<>(new HubState(false, ""));
 
@@ -143,7 +166,10 @@ public final class HubClient {
       String[] hostPort = parseAddress(config.hubAddress());
       InetSocketAddress address = new InetSocketAddress(hostPort[0], Integer.parseInt(hostPort[1]));
       NettyChannelBuilder builder =
-          NettyChannelBuilder.forAddress(address).maxInboundMessageSize((int) MAX_MSG);
+          NettyChannelBuilder.forAddress(address)
+              .maxInboundMessageSize((int) MAX_MSG)
+              // Close the transport when idle; gRPC reopens it transparently on the next RPC.
+              .idleTimeout(IDLE_TIMEOUT_SEC, TimeUnit.SECONDS);
       if (config.hubTls()) {
         if (config.hubInsecure()) {
           var ssl =
@@ -170,38 +196,89 @@ public final class HubClient {
       running = false;
       return;
     }
-    scheduler.scheduleAtFixedRate(
-        this::sendHeartbeat, HEARTBEAT_SEC, HEARTBEAT_SEC, TimeUnit.SECONDS);
     awaitAuthThenConnect();
   }
 
   /**
    * Gates the first connection until the server holds a Hytale identity token (authenticated).
-   * Polls briefly up to {@link #MAX_AUTH_WAIT_SEC}; connects anyway once that limit is reached.
+   * Polls briefly up to {@link #MAX_AUTH_WAIT_SEC}; proceeds anyway once that limit is reached.
    */
   private void awaitAuthThenConnect() {
     if (!running) {
       return;
     }
     if (serverHasIdentityToken()) {
-      LOG.at(Level.INFO).log("[PrefabsUploader] conectando ao hub em %s", config.hubAddress());
-      connect();
+      LOG.at(Level.INFO).log(
+          "[PrefabsUploader] buscando estado inicial do hub em %s", config.hubAddress());
+      bootFetchConfigState();
       return;
     }
     if (authWaitedSec >= MAX_AUTH_WAIT_SEC) {
       LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] sem identity token do Hytale após %ds — conectando mesmo assim "
+          "[PrefabsUploader] sem identity token do Hytale após %ds — seguindo mesmo assim "
               + "(o hub recusa se o servidor não estiver autenticado; rode /auth login).",
           MAX_AUTH_WAIT_SEC);
-      connect();
+      bootFetchConfigState();
       return;
     }
     if (authWaitedSec == 0) {
       LOG.at(Level.INFO).log(
-          "[PrefabsUploader] aguardando autenticação do servidor no Hytale antes de conectar ao hub…");
+          "[PrefabsUploader] aguardando autenticação do servidor no Hytale antes de falar com o hub…");
     }
     authWaitedSec += AUTH_POLL_SEC;
     scheduler.schedule(this::awaitAuthThenConnect, AUTH_POLL_SEC, TimeUnit.SECONDS);
+  }
+
+  /**
+   * Boot step: open the {@code Connect} stream briefly to receive the initial {@link ConfigState}
+   * (configured + invite url + auth token), then close it. Retries with backoff if the hub is
+   * unreachable. Runs on the scheduler thread.
+   */
+  private void bootFetchConfigState() {
+    if (!running || bootDone) {
+      return;
+    }
+    Window w;
+    try {
+      w = openWindow(BOOT_WINDOW_SEC);
+    } catch (Throwable t) {
+      LOG.at(Level.INFO).log("[PrefabsUploader] estado inicial indisponível: %s", t.getMessage());
+      scheduleBootRetry();
+      return;
+    }
+    // Close as soon as the first ConfigState (configured or not) arrives; else the deadline closes
+    // it.
+    Runnable[] holder = new Runnable[1];
+    holder[0] =
+        () -> {
+          if (!stateWaiters.remove(holder[0])) {
+            return;
+          }
+          bootDone = true;
+          bootBackoffSec = BOOT_BACKOFF_MIN_SEC;
+          w.close();
+          LOG.at(Level.INFO).log("[PrefabsUploader] estado inicial do hub recebido");
+        };
+    stateWaiters.add(holder[0]);
+    // If the window times out without a ConfigState, retry boot.
+    w.onExpire(
+        () -> {
+          stateWaiters.remove(holder[0]);
+          if (!bootDone) {
+            LOG.at(Level.INFO).log(
+                "[PrefabsUploader] hub não respondeu com estado inicial — nova tentativa");
+            scheduleBootRetry();
+          }
+        });
+  }
+
+  private void scheduleBootRetry() {
+    if (!running || bootDone) {
+      return;
+    }
+    long delay = bootBackoffSec;
+    bootBackoffSec = Math.min(bootBackoffSec * 2, BOOT_BACKOFF_MAX_SEC);
+    scheduler.schedule(this::bootFetchConfigState, delay, TimeUnit.SECONDS);
   }
 
   /** Returns true if the server is already authenticated with Hytale (holds an identity token). */
@@ -285,58 +362,182 @@ public final class HubClient {
     return b.toString();
   }
 
-  private void connect() {
-    if (!running) {
+  // ---------------------------------------------------------------------------
+  // Windowed Connect stream
+  // ---------------------------------------------------------------------------
+
+  /**
+   * A listening window. While at least one window is open the shared {@code Connect} stream stays
+   * up; when all windows close (deadline or explicit {@link #close()}) the stream is torn down. A
+   * window auto-closes after its duration; an optional {@link #onExpire(Runnable)} hook fires only
+   * when it closes by deadline (not by an explicit {@code close()}).
+   */
+  public final class Window {
+    private final ScheduledFuture<?> deadline;
+    private volatile Runnable onExpire;
+    private volatile boolean closed = false;
+
+    private Window(long seconds) {
+      this.deadline = scheduler.schedule(this::expire, seconds, TimeUnit.SECONDS);
+    }
+
+    /** Registers a callback fired only if the window closes by reaching its deadline. */
+    public void onExpire(Runnable r) {
+      this.onExpire = r;
+    }
+
+    private void expire() {
+      Runnable hook = null;
+      synchronized (streamLock) {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        hook = onExpire;
+        releaseWindowLocked();
+      }
+      if (hook != null) {
+        runSafe(hook);
+      }
+    }
+
+    /** Closes the window explicitly (e.g. the awaited event arrived). */
+    public void close() {
+      synchronized (streamLock) {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        deadline.cancel(false);
+        releaseWindowLocked();
+      }
+    }
+  }
+
+  /**
+   * Opens a listening window of {@code seconds}, ensuring the shared {@code Connect} stream is up.
+   * Must be called off the world thread.
+   *
+   * @throws IllegalStateException if the client is not running or the channel is unavailable
+   */
+  public Window openWindow(long seconds) {
+    if (!running || channel == null) {
+      throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
+    }
+    synchronized (streamLock) {
+      if (outbound == null) {
+        openStreamLocked();
+      }
+      activeWindows++;
+      return new Window(seconds);
+    }
+  }
+
+  /** Decrements the window count and closes the stream once no window remains. Holds streamLock. */
+  private void releaseWindowLocked() {
+    activeWindows = Math.max(0, activeWindows - 1);
+    if (activeWindows == 0) {
+      closeStreamLocked();
+    }
+  }
+
+  /** Opens the shared Connect stream and sends Register. Holds streamLock. */
+  private void openStreamLocked() {
+    PrefabsUploaderGrpc.PrefabsUploaderStub stub = PrefabsUploaderGrpc.newStub(channel);
+    StreamObserver<PluginMessage> out = stub.connect(new HubResponseObserver());
+    outbound = out;
+    synchronized (sendLock) {
+      out.onNext(
+          PluginMessage.newBuilder()
+              .setRegister(
+                  Register.newBuilder()
+                      .setServerId(config.serverId())
+                      .setPluginVersion(PluginConfig.PLUGIN_VERSION)
+                      .setAuthToken(config.authToken())
+                      .build())
+              .build());
+    }
+    LOG.at(Level.FINE).log("[PrefabsUploader] janela aberta — stream Connect ativo");
+  }
+
+  /** Completes and drops the shared Connect stream. Holds streamLock. */
+  private void closeStreamLocked() {
+    StreamObserver<PluginMessage> out = outbound;
+    outbound = null;
+    if (out == null) {
       return;
     }
     try {
-      PrefabsUploaderGrpc.PrefabsUploaderStub stub = PrefabsUploaderGrpc.newStub(channel);
-      StreamObserver<PluginMessage> out = stub.connect(new HubResponseObserver());
-      outbound.set(out);
       synchronized (sendLock) {
-        out.onNext(
-            PluginMessage.newBuilder()
-                .setRegister(
-                    Register.newBuilder()
-                        .setServerId(config.serverId())
-                        .setPluginVersion(PluginConfig.PLUGIN_VERSION)
-                        .setAuthToken(config.authToken())
-                        .build())
-                .build());
+        out.onCompleted();
       }
     } catch (Throwable t) {
-      LOG.at(Level.WARNING).log("[PrefabsUploader] connect falhou: %s", t.getMessage());
-      scheduleReconnect();
+      LOG.at(Level.FINE).log("[PrefabsUploader] fechar stream falhou: %s", t.getMessage());
+    }
+    LOG.at(Level.FINE).log(
+        "[PrefabsUploader] todas as janelas fecharam — stream Connect encerrado");
+  }
+
+  private void runSafe(Runnable r) {
+    try {
+      r.run();
+    } catch (Throwable t) {
+      LOG.at(Level.WARNING).log("[PrefabsUploader] callback de janela falhou: %s", t.getMessage());
     }
   }
 
-  private void scheduleReconnect() {
-    if (!running) {
-      return;
-    }
-    outbound.set(null);
-    long delay = backoffSec;
-    backoffSec = Math.min(backoffSec * 2, BACKOFF_MAX_SEC);
-    LOG.at(Level.INFO).log("[PrefabsUploader] reconectando em %ds", delay);
-    scheduler.schedule(this::connect, delay, TimeUnit.SECONDS);
+  /**
+   * Registers a one-shot setup waiter, fired when a {@link ConfigState} with {@code
+   * configured=true} arrives on the stream. The caller is responsible for opening the window. The
+   * waiter removes itself on fire.
+   *
+   * @return a handle to deregister the waiter manually (e.g. on window expiry)
+   */
+  public Runnable awaitConfigured(Runnable onConfigured) {
+    Runnable[] holder = new Runnable[1];
+    holder[0] =
+        () -> {
+          if (configuredWaiters.remove(holder[0])) {
+            runSafe(onConfigured);
+          }
+        };
+    configuredWaiters.add(holder[0]);
+    return () -> configuredWaiters.remove(holder[0]);
   }
 
-  private void sendHeartbeat() {
-    synchronized (sendLock) {
-      StreamObserver<PluginMessage> out = outbound.get();
-      if (out == null) {
-        return;
-      }
-      try {
-        out.onNext(
-            PluginMessage.newBuilder()
-                .setHeartbeat(Heartbeat.newBuilder().setTimestampMs(System.currentTimeMillis()))
-                .build());
-      } catch (Throwable t) {
-        LOG.at(Level.FINE).log("[PrefabsUploader] heartbeat falhou: %s", t.getMessage());
-      }
-    }
+  /**
+   * Registers a one-shot link waiter, fired when a {@link PlayerLinked} whose {@code player_uuid}
+   * equals {@code playerUuid} arrives on the stream. The caller opens the window.
+   *
+   * @return a handle to deregister the waiter manually (e.g. on window expiry)
+   */
+  public Runnable awaitPlayerLinked(String playerUuid, Consumer<PlayerLinked> onLinked) {
+    Consumer<PlayerLinked>[] holder = newConsumerArray();
+    holder[0] =
+        linked -> {
+          if (playerUuid != null && playerUuid.equals(linked.getPlayerUuid())) {
+            if (linkWaiters.remove(holder[0])) {
+              try {
+                onLinked.accept(linked);
+              } catch (Throwable t) {
+                LOG.at(Level.WARNING).log(
+                    "[PrefabsUploader] callback de link falhou: %s", t.getMessage());
+              }
+            }
+          }
+        };
+    linkWaiters.add(holder[0]);
+    return () -> linkWaiters.remove(holder[0]);
   }
+
+  @SuppressWarnings("unchecked")
+  private static Consumer<PlayerLinked>[] newConsumerArray() {
+    return new Consumer[1];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Unary RPCs
+  // ---------------------------------------------------------------------------
 
   /** Called by {@code /prefabs-uploader config setup}. Blocking — run off the game thread. */
   public SetupResponse requestSetup(String requestedBy) {
@@ -352,7 +553,9 @@ public final class HubClient {
             .build());
   }
 
-  /** Called by {@code /prefabs-uploader import}. Blocking — run off the game thread. */
+  /**
+   * Called by {@code /prefabs-uploader import}/{@code link}. Blocking — run off the game thread.
+   */
   public PlayerImportResponse playerImport(String playerUuid, String playerName) {
     if (channel == null) {
       throw new IllegalStateException("integração não inicializada (canal gRPC indisponível)");
@@ -512,16 +715,11 @@ public final class HubClient {
     running = false;
     scheduler.shutdownNow();
     ioExecutor.shutdownNow();
-    StreamObserver<PluginMessage> out = outbound.getAndSet(null);
-    if (out != null) {
-      try {
-        synchronized (sendLock) {
-          out.onCompleted();
-        }
-      } catch (Throwable t) {
-        LOG.at(Level.FINE).log(
-            "[PrefabsUploader] onCompleted no shutdown falhou: %s", t.getMessage());
-      }
+    configuredWaiters.clear();
+    linkWaiters.clear();
+    synchronized (streamLock) {
+      activeWindows = 0;
+      closeStreamLocked();
     }
     if (channel != null) {
       channel.shutdownNow();
@@ -536,27 +734,31 @@ public final class HubClient {
     return new String[] {addr.substring(0, i), addr.substring(i + 1)};
   }
 
-  /** Handles the downstream messages coming from the hub. */
+  /** Handles the downstream messages coming from the hub on the shared windowed stream. */
   private final class HubResponseObserver implements StreamObserver<HubMessage> {
     @Override
     public void onNext(HubMessage msg) {
-      backoffSec = BACKOFF_MIN_SEC;
       switch (msg.getPayloadCase()) {
         case CONFIG_STATE -> onConfigState(msg.getConfigState());
+        case PLAYER_LINKED -> onPlayerLinked(msg.getPlayerLinked());
         default -> {}
       }
     }
 
     @Override
     public void onError(Throwable t) {
-      LOG.at(Level.WARNING).log("[PrefabsUploader] stream com erro: %s", t.getMessage());
-      scheduleReconnect();
+      LOG.at(Level.FINE).log("[PrefabsUploader] stream encerrado: %s", t.getMessage());
+      // Drop the dead stream; the next openWindow() reopens it.
+      synchronized (streamLock) {
+        outbound = null;
+      }
     }
 
     @Override
     public void onCompleted() {
-      LOG.at(Level.INFO).log("[PrefabsUploader] hub encerrou o stream");
-      scheduleReconnect();
+      synchronized (streamLock) {
+        outbound = null;
+      }
     }
   }
 
@@ -569,5 +771,24 @@ public final class HubClient {
     LOG.at(Level.INFO).log(
         "[PrefabsUploader] config atualizada: configured=%s guild=%s",
         cs.getConfigured(), cs.getGuildId());
+    // Boot/state waiters fire on every ConfigState; configured waiters only when configured=true.
+    for (Runnable w : new ArrayList<>(stateWaiters)) {
+      runSafe(w);
+    }
+    if (cs.getConfigured()) {
+      for (Runnable w : new ArrayList<>(configuredWaiters)) {
+        runSafe(w);
+      }
+    }
+  }
+
+  private void onPlayerLinked(PlayerLinked pl) {
+    LOG.at(Level.INFO).log(
+        "[PrefabsUploader] player linkado: uuid=%s discord=%s",
+        pl.getPlayerUuid(), pl.getDiscordName());
+    List<Consumer<PlayerLinked>> snapshot = new ArrayList<>(linkWaiters);
+    for (Consumer<PlayerLinked> w : snapshot) {
+      w.accept(pl);
+    }
   }
 }
