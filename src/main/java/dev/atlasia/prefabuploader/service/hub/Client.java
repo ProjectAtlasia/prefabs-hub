@@ -172,6 +172,11 @@ public final class Client {
     return config.maxPrefabBytes();
   }
 
+  /** The owner-configured maximum number of approved prefabs per player. */
+  public int maxPrefabsPerPlayer() {
+    return config.maxPrefabsPerPlayer();
+  }
+
   public void start() {
     if (running) {
       return;

@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 /**
  * Approves server prefabs: validates the bytes with the engine's native validator (via a temp file,
@@ -69,9 +70,12 @@ public final class PendingPrefabStore {
    * @param data bytes of the {@code .prefab.json}
    * @param adminName username of the approving admin (audit)
    * @param adminUuid uuid of the approving admin (audit)
-   * @throws IOException if the data is missing, rejected by validation, or the write fails
+   * @param maxPerOwner the maximum number of prefabs a single owner may keep (quota)
+   * @throws IOException if the data is missing, rejected by validation, over quota, or the write
+   *     fails
    */
-  public void approve(PendingPrefab p, byte[] data, String adminName, String adminUuid)
+  public void approve(
+      PendingPrefab p, byte[] data, String adminName, String adminUuid, int maxPerOwner)
       throws IOException {
     if (data == null || data.length == 0) {
       throw new IOException("no prefab data (not downloaded?)");
@@ -116,6 +120,10 @@ public final class PendingPrefabStore {
       if (Files.isSymbolicLink(dest)) {
         throw new IOException("destination is a symlink — refused");
       }
+      if (!Files.exists(dest) && countOwnerPrefabs(liveRoot, owner) >= maxPerOwner) {
+        throw new IOException(
+            "upload quota reached: this player already owns " + maxPerOwner + " prefabs (max)");
+      }
 
       Files.write(dest, data);
 
@@ -148,6 +156,21 @@ public final class PendingPrefabStore {
       LOG.at(Level.WARNING).withCause(t).log(
           "[PrefabsUploader] native validation unavailable — rejecting approval (fail-secure)");
       return "native validation unavailable";
+    }
+  }
+
+  /**
+   * Counts how many approved prefabs an owner already has in the live tree (files named {@code
+   * <owner>_*<SUFFIX>}).
+   */
+  private static long countOwnerPrefabs(Path liveRoot, String owner) throws IOException {
+    String prefix = owner + "_";
+    try (Stream<Path> files = Files.list(liveRoot)) {
+      return files
+          .filter(Files::isRegularFile)
+          .map(path -> path.getFileName().toString())
+          .filter(name -> name.startsWith(prefix) && name.endsWith(SUFFIX))
+          .count();
     }
   }
 

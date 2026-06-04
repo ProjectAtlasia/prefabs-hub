@@ -71,6 +71,10 @@ public final class PluginConfig {
   private static final int MIN_MAX_PREFAB_MB = 1;
   private static final int MAX_MAX_PREFAB_MB = 64;
 
+  private static final int DEFAULT_MAX_PER_PLAYER = 25;
+  private static final int MIN_MAX_PER_PLAYER = 1;
+  private static final int MAX_MAX_PER_PLAYER = 1000;
+
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
   private final Path file;
@@ -80,6 +84,7 @@ public final class PluginConfig {
   private boolean hubTls;
   private boolean hubInsecure;
   private int maxPrefabBytes;
+  private int maxPrefabsPerPlayer;
   private String authToken;
   private boolean pairMessage;
   private String inviteUrl;
@@ -116,6 +121,9 @@ public final class PluginConfig {
       maxPrefabBytes =
           parseMaxPrefabBytes(
               props.getProperty("prefab.max.size.mb", String.valueOf(DEFAULT_MAX_PREFAB_MB)));
+      maxPrefabsPerPlayer =
+          parseMaxPerPlayer(
+              props.getProperty("prefab.max.per.player", String.valueOf(DEFAULT_MAX_PER_PLAYER)));
       authToken = props.getProperty("auth.token", "");
       pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
       inviteUrl = props.getProperty("discord.invite.url", "");
@@ -126,6 +134,7 @@ public final class PluginConfig {
       hubTls = DEFAULT_TLS;
       hubInsecure = false;
       maxPrefabBytes = DEFAULT_MAX_PREFAB_MB << 20;
+      maxPrefabsPerPlayer = DEFAULT_MAX_PER_PLAYER;
       authToken = "";
       pairMessage = true;
       inviteUrl = "";
@@ -156,21 +165,40 @@ public final class PluginConfig {
     }
   }
 
-  /**
-   * Parses the configured max prefab size (in MB), clamped to {@code [MIN..MAX]} and converted to
-   * bytes. Falls back to the default on a malformed value.
-   */
+  /** Parses the configured max prefab size (in MB), clamped, and converts it to bytes. */
   private static int parseMaxPrefabBytes(String rawMb) {
-    int mb;
+    return parseClampedInt(
+            rawMb,
+            "prefab.max.size.mb",
+            DEFAULT_MAX_PREFAB_MB,
+            MIN_MAX_PREFAB_MB,
+            MAX_MAX_PREFAB_MB)
+        << 20;
+  }
+
+  /** Parses the configured per-player prefab quota, clamped to {@code [MIN..MAX]}. */
+  private static int parseMaxPerPlayer(String raw) {
+    return parseClampedInt(
+        raw,
+        "prefab.max.per.player",
+        DEFAULT_MAX_PER_PLAYER,
+        MIN_MAX_PER_PLAYER,
+        MAX_MAX_PER_PLAYER);
+  }
+
+  /**
+   * Parses an integer config value, clamping to {@code [min..max]} and falling back to {@code def}
+   * (with a warning) on a malformed value.
+   */
+  private static int parseClampedInt(String raw, String key, int def, int min, int max) {
+    int v;
     try {
-      mb = Integer.parseInt(rawMb.trim());
+      v = Integer.parseInt(raw.trim());
     } catch (NumberFormatException e) {
-      LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] invalid prefab.max.size.mb='%s'; using default", rawMb);
-      mb = DEFAULT_MAX_PREFAB_MB;
+      LOG.at(Level.WARNING).log("[PrefabsUploader] invalid %s='%s'; using default", key, raw);
+      v = def;
     }
-    mb = Math.max(MIN_MAX_PREFAB_MB, Math.min(MAX_MAX_PREFAB_MB, mb));
-    return mb << 20;
+    return Math.max(min, Math.min(max, v));
   }
 
   /** Writes the commented config file from the current values (atomic write, 0600 permissions). */
@@ -221,6 +249,10 @@ public final class PluginConfig {
     b.append("# Clamped to [1..64]. Default 8.\n");
     b.append("prefab.max.size.mb=").append(maxPrefabBytes >> 20).append('\n');
     b.append("\n");
+    b.append("# Max number of approved prefabs a single player may own; further approvals are\n");
+    b.append("# rejected until they delete some. Clamped to [1..1000]. Default 25.\n");
+    b.append("prefab.max.per.player=").append(maxPrefabsPerPlayer).append('\n');
+    b.append("\n");
     b.append("# pair.message=false turns off the automatic chat prompt to pair the server.\n");
     b.append("# The commands keep working normally (it only silences the broadcast).\n");
     b.append("pair.message=").append(pairMessage).append('\n');
@@ -269,6 +301,11 @@ public final class PluginConfig {
   /** Maximum prefab upload size in bytes, configured by the server owner. */
   public int maxPrefabBytes() {
     return maxPrefabBytes;
+  }
+
+  /** Maximum number of approved prefabs a single player may own, configured by the server owner. */
+  public int maxPrefabsPerPlayer() {
+    return maxPrefabsPerPlayer;
   }
 
   public String authToken() {

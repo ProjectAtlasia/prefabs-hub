@@ -309,7 +309,13 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 runOnWorldAwait(
                     () -> {
                       try {
-                        PendingPrefabStore.get().approve(sel, finalBytes, adminName, adminUuid);
+                        PendingPrefabStore.get()
+                            .approve(
+                                sel,
+                                finalBytes,
+                                adminName,
+                                adminUuid,
+                                hubClient.maxPrefabsPerPlayer());
                       } catch (Throwable t) {
                         throw new RuntimeException(t);
                       }
