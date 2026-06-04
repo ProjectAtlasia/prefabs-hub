@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,6 +25,7 @@ import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -56,7 +57,7 @@ public class ImportCommand extends AbstractCommand {
     PlayerRef sender = context.senderAs(PlayerRef.class);
     String uuid = sender.getUuid().toString();
     String username = sender.getUsername();
-    dev.atlasia.prefabuploader.service.prefab.PlayerNameCache.get().put(uuid, username);
+    PlayerNameCache.get().put(uuid, username);
 
     return CompletableFuture.runAsync(
         () -> {
@@ -70,7 +71,7 @@ public class ImportCommand extends AbstractCommand {
               default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
             }
           } catch (Throwable t) {
-            LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport falhou: %s", t.getMessage());
+            LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport failed: %s", t.getMessage());
             context.sendMessage(
                 tagged(Message.translation("server.prefabsuploader.import.hubError")));
           }

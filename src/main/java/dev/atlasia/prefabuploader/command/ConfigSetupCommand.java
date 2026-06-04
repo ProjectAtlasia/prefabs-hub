@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -54,11 +54,7 @@ public class ConfigSetupCommand extends AbstractCommand {
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext context) {
     String requestedBy =
-        context.isPlayer()
-            ? context
-                .senderAs(com.hypixel.hytale.server.core.universe.PlayerRef.class)
-                .getUsername()
-            : "console";
+        context.isPlayer() ? context.senderAs(PlayerRef.class).getUsername() : "console";
     context.sendMessage(
         Message.join(
             Message.raw("[PrefabsUploader] ").color(TAG),
@@ -95,7 +91,7 @@ public class ConfigSetupCommand extends AbstractCommand {
             context.sendMessage(Message.translation("server.prefabsuploader.config.setup.expires"));
             openSetupWindow(context);
           } catch (Throwable t) {
-            LOG.at(Level.WARNING).log("[PrefabsUploader] requestSetup falhou: %s", t.getMessage());
+            LOG.at(Level.WARNING).log("[PrefabsUploader] requestSetup failed: %s", t.getMessage());
             context.sendMessage(
                 Message.join(
                     Message.raw("[PrefabsUploader] ").color(TAG),
@@ -132,7 +128,7 @@ public class ConfigSetupCommand extends AbstractCommand {
       }
     } catch (Throwable t) {
       LOG.at(Level.FINE).log(
-          "[PrefabsUploader] confirmação in-game de setup falhou: %s", t.getMessage());
+          "[PrefabsUploader] in-game setup confirmation failed: %s", t.getMessage());
     }
   }
 }

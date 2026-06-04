@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -48,8 +48,12 @@ import dev.atlasia.prefabuploader.service.prefab.PendingPrefab;
 import dev.atlasia.prefabuploader.service.prefab.PendingPrefabStore;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
 import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -229,7 +233,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 result = PrefabValidator.validate(bytes);
               } catch (Throwable t) {
                 LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] preview download/validate falhou (%s): %s",
+                    "[PrefabsUploader] preview download/validate failed (%s): %s",
                     target.prefabName(), t.getMessage());
                 runOnWorld(
                     () -> {
@@ -249,7 +253,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                         return;
                       }
                       LOG.at(Level.INFO).log(
-                          "[PrefabsUploader] preview rejeitado (%s): %s",
+                          "[PrefabsUploader] preview rejected (%s): %s",
                           target.prefabName(), reason);
                       showDetailValidationFailed(reason);
                     });
@@ -296,7 +300,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                   bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
                   PrefabValidator.Result rv = PrefabValidator.validate(bytes);
                   if (!rv.ok()) {
-                    throw new java.io.IOException(rv.error());
+                    throw new IOException(rv.error());
                   }
                 }
                 final byte[] finalBytes = bytes;
@@ -313,7 +317,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 ResolvePendingResponse resp = hubClient.resolvePending(sel.id(), true, adminName);
                 if (!resp.getOk() && !resp.getError().isBlank()) {
                   LOG.at(Level.WARNING).log(
-                      "[PrefabsUploader] resolvePending(approved) com erro do hub: %s",
+                      "[PrefabsUploader] resolvePending(approved) returned a hub error: %s",
                       resp.getError());
                 }
                 runOnWorld(
@@ -327,7 +331,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               } catch (Throwable t) {
                 final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
-                    "[PrefabsUploader] falha ao aprovar prefab %s", sel.prefabName());
+                    "[PrefabsUploader] failed to approve prefab %s", sel.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen == selectionGen) {
@@ -357,7 +361,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 ResolvePendingResponse resp = hubClient.resolvePending(sel.id(), false, adminName);
                 if (!resp.getOk() && !resp.getError().isBlank()) {
                   LOG.at(Level.WARNING).log(
-                      "[PrefabsUploader] resolvePending(rejected) com erro do hub: %s",
+                      "[PrefabsUploader] resolvePending(rejected) returned a hub error: %s",
                       resp.getError());
                 }
                 runOnWorld(
@@ -371,7 +375,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               } catch (Throwable t) {
                 final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
-                    "[PrefabsUploader] falha ao rejeitar prefab %s", sel.prefabName());
+                    "[PrefabsUploader] failed to reject prefab %s", sel.prefabName());
                 runOnWorld(() -> sendError(reason));
               }
             });
@@ -397,9 +401,9 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       pkt.waterTint = defaultWaterTint;
       playerRef.getPacketHandler().write(pkt);
       LOG.at(Level.INFO).log(
-          "[PrefabsUploader] preview enviado: %s blocks=%d", p.prefabName(), sel.getBlockCount());
+          "[PrefabsUploader] preview sent: %s blocks=%d", p.prefabName(), sel.getBlockCount());
     } catch (Throwable t) {
-      LOG.at(Level.WARNING).withCause(t).log("[PrefabsUploader] preview falhou");
+      LOG.at(Level.WARNING).withCause(t).log("[PrefabsUploader] preview failed");
     }
   }
 
@@ -408,7 +412,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     try {
       playerRef.getPacketHandler().write(new BuilderToolPrefabPreview());
     } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] clear preview falhou: %s", t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] clear preview failed: %s", t.getMessage());
     }
   }
 
@@ -430,7 +434,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       defaultWaterTint =
           ColorParseUtil.colorToARGBInt(Environment.getUnknownFor("").getWaterTint()) & 0xFFFFFF;
     } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] tints default indisponíveis: %s", t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] default tints unavailable: %s", t.getMessage());
       defaultBiomeTint = null;
       defaultWaterTint = null;
     }
@@ -446,7 +450,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     try {
       return Universe.get().getWorld(playerRef.getWorldUuid());
     } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] mundo indisponível: %s", t.getMessage());
+      LOG.at(Level.FINE).log("[PrefabsUploader] world unavailable: %s", t.getMessage());
       return null;
     }
   }
@@ -467,7 +471,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
             r.run();
           } catch (Throwable t) {
             LOG.at(Level.WARNING).withCause(t).log(
-                "[PrefabsUploader] tarefa de UI na world thread falhou");
+                "[PrefabsUploader] UI task on the world thread failed");
           }
         });
   }
@@ -482,10 +486,9 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   private void runOnWorldAwait(Runnable r) throws Exception {
     World w = world();
     if (w == null) {
-      throw new java.io.IOException("mundo indisponível");
+      throw new IOException("world unavailable");
     }
-    java.util.concurrent.CompletableFuture<Void> done =
-        new java.util.concurrent.CompletableFuture<>();
+    CompletableFuture<Void> done = new CompletableFuture<>();
     w.execute(
         () -> {
           try {
@@ -496,13 +499,13 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
           }
         });
     try {
-      done.get(20, java.util.concurrent.TimeUnit.SECONDS);
-    } catch (java.util.concurrent.ExecutionException ee) {
+      done.get(20, TimeUnit.SECONDS);
+    } catch (ExecutionException ee) {
       Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
       if (cause instanceof Exception ex) {
         throw ex;
       }
-      throw new java.io.IOException(cause.getMessage(), cause);
+      throw new IOException(cause.getMessage(), cause);
     }
   }
 
