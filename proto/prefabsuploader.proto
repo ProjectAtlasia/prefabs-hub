@@ -65,7 +65,16 @@ message HubMessage {
   oneof payload {
     ConfigState config_state = 1;
     PrefabPush prefab_push = 2;
+    PlayerLinked player_linked = 3;
   }
+}
+
+// Sent on the (windowed) stream when a player completes the Discord link, so the plugin can confirm
+// it in-game to that player. The plugin matches by player_uuid against its open link windows.
+message PlayerLinked {
+  string player_uuid = 1;
+  string player_name = 2;    // in-game name from the link
+  string discord_name = 3;   // Discord username, for the in-game confirmation message
 }
 
 // Server configuration state, sent after Register and on every change.
