@@ -29,6 +29,7 @@ import dev.atlasia.prefabuploader.service.hub.Client;
 import dev.atlasia.prefabuploader.service.messaging.LinkFlow;
 import dev.atlasia.prefabuploader.service.messaging.StatusReply;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
+import dev.atlasia.prefabuploader.service.ratelimit.CommandRateLimiter;
 import java.awt.Color;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -68,6 +69,15 @@ public class ImportCommand extends AbstractCommand {
     String uuid = sender.getUuid().toString();
     String username = sender.getUsername();
     PlayerNameCache.get().put(uuid, username);
+
+    long wait = CommandRateLimiter.get().remainingCooldownSeconds(uuid);
+    if (wait > 0) {
+      context.sendMessage(
+          tagged(
+              Message.translation("server.prefabsuploader.ratelimit.wait")
+                  .param("seconds", String.valueOf(wait))));
+      return CompletableFuture.completedFuture(null);
+    }
 
     return CompletableFuture.runAsync(
         () -> {

@@ -14,6 +14,7 @@ prefabsuploader.import.notplayer = Apenas jogadores podem usar /prefabs-uploader
 prefabsuploader.import.threadOpened = Abrimos uma thread privada no Discord pra você. Mande seu .prefab.json lá.
 prefabsuploader.import.dmOpened = Não consegui abrir uma thread (o dono do servidor precisa ajustar as permissões do bot). Te chamei na DM — mande seu .prefab.json por lá.
 prefabsuploader.import.hubError = Falha ao falar com o hub. Confira se o bot do Discord está online.
+prefabsuploader.ratelimit.wait = Aguarde {seconds}s antes de tentar de novo.
 
 # ---- status do import/link (configuração/contato) ----
 prefabsuploader.status.notConfigured = Este servidor ainda não foi configurado no Discord. Avise um admin.
