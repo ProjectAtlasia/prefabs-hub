@@ -27,15 +27,12 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
 import com.hypixel.hytale.server.core.Message;
-import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
 import com.hypixel.hytale.server.core.prefab.config.SelectionPrefabSerializer;
 import com.hypixel.hytale.server.core.prefab.selection.standard.BlockSelection;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.Universe;
-import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
@@ -44,15 +41,11 @@ import dev.atlasia.prefabuploader.service.prefab.PendingPrefabStore;
 import dev.atlasia.prefabuploader.service.prefab.PrefabBlockFilter;
 import dev.atlasia.prefabuploader.service.prefab.PrefabBlockManifest;
 import java.awt.Color;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 import org.bson.BsonDocument;
@@ -65,10 +58,9 @@ import org.bson.BsonDocument;
  * <p>The selection is deserialized once on the world thread; toggling and the final filter/approve
  * all run on the world thread, while the blocking hub RPC runs on the {@link Client} I/O executor.
  */
-public class PrefabBlockReviewPage extends InteractiveCustomUIPage<PrefabBlockReviewPage.Data> {
+public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewPage.Data> {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final int ROWS = 20;
 
   private static final Color GREEN = new Color(0x55, 0xDD, 0x77);
   private static final Color RED = new Color(0xEE, 0x55, 0x55);
@@ -278,8 +270,7 @@ public class PrefabBlockReviewPage extends InteractiveCustomUIPage<PrefabBlockRe
                       b.set("#Confirm.Disabled", true);
                       sendUpdate(b, false);
                       playerRef.sendMessage(
-                          Message.join(
-                              Message.raw("[PrefabsUploader] "),
+                          tagged(
                               Message.translation("server.prefabsuploader.blockreview.approvedChat")
                                   .param("name", sanitize(pending.prefabName()))));
                     });
@@ -365,121 +356,5 @@ public class PrefabBlockReviewPage extends InteractiveCustomUIPage<PrefabBlockRe
             .param("allowed", allowedCount)
             .param("blocked", blockedCount));
     b.set("#Confirm.Disabled", done || entries.isEmpty() || allowedCount == 0);
-  }
-
-  /**
-   * Returns the player's world.
-   *
-   * @return the world, or {@code null} if the player disconnected
-   */
-  private World world() {
-    try {
-      return Universe.get().getWorld(playerRef.getWorldUuid());
-    } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] world unavailable: %s", t.getMessage());
-      return null;
-    }
-  }
-
-  /**
-   * Runs {@code r} on the player's world thread, as required for UI operations.
-   *
-   * @param r the task to run
-   */
-  private void runOnWorld(Runnable r) {
-    World w = world();
-    if (w == null) {
-      return;
-    }
-    w.execute(
-        () -> {
-          try {
-            r.run();
-          } catch (Throwable t) {
-            LOG.at(Level.WARNING).withCause(t).log(
-                "[PrefabsUploader] UI task on the world thread failed");
-          }
-        });
-  }
-
-  /**
-   * Runs {@code r} on the world thread and blocks until it completes, propagating any exception.
-   * Must be called only from the I/O executor, never from the world thread, to avoid deadlock.
-   *
-   * @param r the task to run
-   * @throws Exception if the task fails or the world is unavailable
-   */
-  private void runOnWorldAwait(Runnable r) throws Exception {
-    World w = world();
-    if (w == null) {
-      throw new IOException("world unavailable");
-    }
-    CompletableFuture<Void> doneFuture = new CompletableFuture<>();
-    w.execute(
-        () -> {
-          try {
-            r.run();
-            doneFuture.complete(null);
-          } catch (Throwable t) {
-            doneFuture.completeExceptionally(t);
-          }
-        });
-    try {
-      doneFuture.get(20, TimeUnit.SECONDS);
-    } catch (ExecutionException ee) {
-      Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
-      if (cause instanceof Exception ex) {
-        throw ex;
-      }
-      throw new IOException(cause.getMessage(), cause);
-    }
-  }
-
-  private static int parseIdx(String action, String prefix) {
-    try {
-      return Integer.parseInt(action.substring(prefix.length()));
-    } catch (NumberFormatException e) {
-      return -1;
-    }
-  }
-
-  private static String causeMessage(Throwable t) {
-    Throwable c = t;
-    if (c instanceof RuntimeException && c.getCause() != null) {
-      c = c.getCause();
-    }
-    String msg = c.getMessage();
-    return (msg == null || msg.isBlank()) ? c.getClass().getSimpleName() : msg;
-  }
-
-  /**
-   * Strips Unicode control and formatting characters from a string before display, preventing
-   * layout/RTL spoofing in the UI.
-   *
-   * @param s the input string
-   * @return the sanitized string, or an empty string if {@code s} is null or empty
-   */
-  private static String sanitize(String s) {
-    if (s == null || s.isEmpty()) {
-      return "";
-    }
-    StringBuilder sb = new StringBuilder(s.length());
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      boolean drop =
-          c < 0x20
-              || c == 0x7F
-              || (c >= 0x202A && c <= 0x202E)
-              || (c >= 0x2066 && c <= 0x2069)
-              || c == 0x200B
-              || c == 0x200C
-              || c == 0x200D
-              || c == 0x2060
-              || c == 0xFEFF;
-      if (!drop) {
-        sb.append(c);
-      }
-    }
-    return sb.toString();
   }
 }

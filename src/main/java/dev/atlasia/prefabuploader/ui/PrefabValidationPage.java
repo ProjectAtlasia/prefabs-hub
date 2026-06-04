@@ -33,13 +33,11 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.asset.type.environment.config.Environment;
 import com.hypixel.hytale.server.core.asset.util.ColorParseUtil;
 import com.hypixel.hytale.server.core.entity.entities.Player;
-import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
 import com.hypixel.hytale.server.core.prefab.selection.standard.BlockSelection;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.atlasia.prefabuploader.grpc.GetPendingResponse;
@@ -62,10 +60,9 @@ import javax.annotation.Nonnull;
  * from the CDN into memory, validates it ({@link PrefabValidator}) and renders the preview. Only
  * approval writes to disk.
  */
-public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidationPage.Data> {
+public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPage.Data> {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final int ROWS = 20;
 
   private static final int PREVIEW_TILT = 23;
   private static final int PREVIEW_SPIN_SPEED = 27;
@@ -443,41 +440,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     tintsComputed = true;
   }
 
-  /**
-   * Returns the player's world.
-   *
-   * @return the world, or {@code null} if the player disconnected
-   */
-  private World world() {
-    try {
-      return Universe.get().getWorld(playerRef.getWorldUuid());
-    } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] world unavailable: %s", t.getMessage());
-      return null;
-    }
-  }
-
-  /**
-   * Runs {@code r} on the player's world thread, as required for packet/UI operations.
-   *
-   * @param r the task to run
-   */
-  private void runOnWorld(Runnable r) {
-    World w = world();
-    if (w == null) {
-      return;
-    }
-    w.execute(
-        () -> {
-          try {
-            r.run();
-          } catch (Throwable t) {
-            LOG.at(Level.WARNING).withCause(t).log(
-                "[PrefabsUploader] UI task on the world thread failed");
-          }
-        });
-  }
-
   private List<PendingPrefab> filtered() {
     if (searchFilter.isEmpty()) {
       return cached;
@@ -577,27 +539,14 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   private void sendResult(String i18nKey, String prefabName) {
-    playerRef.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] "),
-            Message.translation(i18nKey).param("name", sanitize(prefabName))));
+    playerRef.sendMessage(tagged(Message.translation(i18nKey).param("name", sanitize(prefabName))));
   }
 
   private void sendError(String reason) {
     playerRef.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] "),
+        tagged(
             Message.translation("server.prefabsuploader.ui.error")
                 .param("error", sanitize(String.valueOf(reason)))));
-  }
-
-  private static String causeMessage(Throwable t) {
-    Throwable c = t;
-    if (c instanceof RuntimeException && c.getCause() != null) {
-      c = c.getCause();
-    }
-    String msg = c.getMessage();
-    return (msg == null || msg.isBlank()) ? c.getClass().getSimpleName() : msg;
   }
 
   /**
@@ -627,44 +576,5 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
           .param("discord", sanitize(dc));
     }
     return Message.raw(sanitize(p.playerUuid()));
-  }
-
-  private static int parseIdx(String action, String prefix) {
-    try {
-      return Integer.parseInt(action.substring(prefix.length()));
-    } catch (NumberFormatException e) {
-      return -1;
-    }
-  }
-
-  /**
-   * Strips Unicode control and formatting characters (C0 controls, DEL, bidi overrides, zero-width)
-   * from player-supplied strings before display, preventing layout/RTL spoofing in the UI.
-   *
-   * @param s the input string
-   * @return the sanitized string, or an empty string if {@code s} is null or empty
-   */
-  private static String sanitize(String s) {
-    if (s == null || s.isEmpty()) {
-      return "";
-    }
-    StringBuilder sb = new StringBuilder(s.length());
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      boolean drop =
-          c < 0x20
-              || c == 0x7F
-              || (c >= 0x202A && c <= 0x202E)
-              || (c >= 0x2066 && c <= 0x2069)
-              || c == 0x200B
-              || c == 0x200C
-              || c == 0x200D
-              || c == 0x2060
-              || c == 0xFEFF;
-      if (!drop) {
-        sb.append(c);
-      }
-    }
-    return sb.toString();
   }
 }
