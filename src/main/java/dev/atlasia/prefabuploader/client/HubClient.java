@@ -85,6 +85,11 @@ public final class HubClient {
 
   private static final Metadata.Key<String> AUTHORIZATION =
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
+  // Headers de identificação enviados em TODA RPC: versão do plugin + nome do servidor Hytale.
+  private static final Metadata.Key<String> PLUGIN_VERSION_HEADER =
+      Metadata.Key.of("x-plugin-version", Metadata.ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<String> SERVER_NAME_HEADER =
+      Metadata.Key.of("x-server-name", Metadata.ASCII_STRING_MARSHALLER);
 
   private final PluginConfig config;
 
@@ -229,6 +234,11 @@ public final class HubClient {
                   "[PrefabsUploader] sem identity token do Hytale — o hub vai recusar. "
                       + "Autentique o servidor no Hytale (/auth login).");
             }
+            headers.put(PLUGIN_VERSION_HEADER, PluginConfig.PLUGIN_VERSION);
+            String name = serverName();
+            if (!name.isEmpty()) {
+              headers.put(SERVER_NAME_HEADER, name);
+            }
             super.start(responseListener, headers);
           }
         };
@@ -249,6 +259,30 @@ public final class HubClient {
           "[PrefabsUploader] falha ao obter identity token do Hytale: %s", t.getMessage());
       return null;
     }
+  }
+
+  /** Nome do servidor Hytale (best-effort; vazio se indisponível), sanitizado pra header ASCII. */
+  private static String serverName() {
+    try {
+      return asciiHeader(com.hypixel.hytale.server.core.HytaleServer.get().getServerName());
+    } catch (Throwable t) {
+      return "";
+    }
+  }
+
+  /** Mantém só ASCII imprimível e limita a 64 chars (metadados gRPC exigem ASCII). */
+  private static String asciiHeader(String s) {
+    if (s == null) {
+      return "";
+    }
+    StringBuilder b = new StringBuilder(Math.min(s.length(), 64));
+    for (int i = 0; i < s.length() && b.length() < 64; i++) {
+      char c = s.charAt(i);
+      if (c >= 0x20 && c <= 0x7E) {
+        b.append(c);
+      }
+    }
+    return b.toString();
   }
 
   private void connect() {
