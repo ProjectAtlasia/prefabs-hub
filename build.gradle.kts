@@ -93,12 +93,14 @@ val generateBuildResource by tasks.registering {
     inputs.property("hubDefault", hubDefault)
     inputs.property("hubTlsDefault", hubTlsDefault)
     inputs.property("hubAllowInsecure", hubAllowInsecure)
+    inputs.property("version", version.toString())
     outputs.dir(generatedResDir)
     doLast {
         val f = generatedResDir.get().file("prefabsuploader-build.properties").asFile
         f.parentFile.mkdirs()
         f.writeText(
-            "hub.default=$hubDefault\nhub.tls=$hubTlsDefault\nhub.insecure.allowed=$hubAllowInsecure\n")
+            "hub.default=$hubDefault\nhub.tls=$hubTlsDefault\n"
+                + "hub.insecure.allowed=$hubAllowInsecure\nversion=$version\n")
     }
 }
 sourceSets.named("main") { resources.srcDir(generateBuildResource) }

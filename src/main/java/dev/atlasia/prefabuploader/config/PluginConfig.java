@@ -38,7 +38,9 @@ import java.util.logging.Level;
 public final class PluginConfig {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  public static final String PLUGIN_VERSION = "0.2.0"; // x-release-please-version
+
+  /** Plugin version, sourced at build time from the Gradle project version (single source). */
+  public static final String PLUGIN_VERSION;
 
   private static final String DEFAULT_HUB;
   private static final boolean DEFAULT_TLS;
@@ -48,6 +50,7 @@ public final class PluginConfig {
     String hub = "localhost:50051";
     boolean tls = false;
     boolean allowInsecure = false;
+    String version = "0.0.0";
     try (InputStream in =
         PluginConfig.class.getResourceAsStream("/prefabsuploader-build.properties")) {
       if (in != null) {
@@ -58,6 +61,7 @@ public final class PluginConfig {
         allowInsecure =
             Boolean.parseBoolean(
                 p.getProperty("hub.insecure.allowed", String.valueOf(allowInsecure)));
+        version = p.getProperty("version", version);
       }
     } catch (IOException e) {
       LOG.at(Level.FINE).log("[PrefabsUploader] build defaults unavailable: %s", e.getMessage());
@@ -65,6 +69,7 @@ public final class PluginConfig {
     DEFAULT_HUB = hub;
     DEFAULT_TLS = tls;
     DEFAULT_ALLOW_INSECURE = allowInsecure;
+    PLUGIN_VERSION = version;
   }
 
   private static final int DEFAULT_MAX_PREFAB_MB = 8;
