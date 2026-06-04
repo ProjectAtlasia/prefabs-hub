@@ -23,8 +23,8 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -39,9 +39,9 @@ public class ImportCommand extends AbstractCommand {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
 
-  private final HubClient client;
+  private final Client client;
 
-  public ImportCommand(@Nonnull HubClient client) {
+  public ImportCommand(@Nonnull Client client) {
     super("import", "server.prefabsuploader.command.import.description");
     this.client = client;
   }
@@ -56,7 +56,7 @@ public class ImportCommand extends AbstractCommand {
     PlayerRef sender = context.senderAs(PlayerRef.class);
     String uuid = sender.getUuid().toString();
     String username = sender.getUsername();
-    dev.atlasia.prefabuploader.prefab.PlayerNameCache.get().put(uuid, username);
+    dev.atlasia.prefabuploader.service.prefab.PlayerNameCache.get().put(uuid, username);
 
     return CompletableFuture.runAsync(
         () -> {

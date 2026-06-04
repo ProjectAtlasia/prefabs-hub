@@ -25,9 +25,9 @@ import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.ListPendingResponse;
-import dev.atlasia.prefabuploader.prefab.PendingPrefab;
+import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.prefab.PendingPrefab;
 import dev.atlasia.prefabuploader.ui.PrefabValidationPage;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -39,15 +39,15 @@ import javax.annotation.Nullable;
  * {@code /prefabs-uploader validate} — opens the pending-prefab validation UI (admin only).
  *
  * <p>The pending list is fetched from the hub via {@code ListPending}. That call is blocking, so it
- * runs on the {@link HubClient} I/O executor and the page is opened afterwards on the world thread.
+ * runs on the {@link Client} I/O executor and the page is opened afterwards on the world thread.
  */
 public class ValidateCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
 
-  private final HubClient hubClient;
+  private final Client hubClient;
 
-  public ValidateCommand(@Nonnull HubClient hubClient) {
+  public ValidateCommand(@Nonnull Client hubClient) {
     super("validate", "server.prefabsuploader.command.validate.description");
     requirePermission("projectatlasia.prefabsuploader.command.validate");
     this.hubClient = hubClient;

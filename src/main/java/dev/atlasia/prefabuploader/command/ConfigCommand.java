@@ -19,14 +19,14 @@
 package dev.atlasia.prefabuploader.command;
 
 import com.hypixel.hytale.server.core.command.system.basecommands.AbstractCommandCollection;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.config.PluginConfig;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import javax.annotation.Nonnull;
 
 /** Sub-command collection {@code /prefabs-uploader config}. */
 public class ConfigCommand extends AbstractCommandCollection {
 
-  public ConfigCommand(@Nonnull HubClient client, @Nonnull PluginConfig config) {
+  public ConfigCommand(@Nonnull Client client, @Nonnull PluginConfig config) {
     super("config", "server.prefabsuploader.command.config.description");
     addSubCommand(new ConfigSetupCommand(client));
     addSubCommand(new ConfigPairMessageCommand(config));

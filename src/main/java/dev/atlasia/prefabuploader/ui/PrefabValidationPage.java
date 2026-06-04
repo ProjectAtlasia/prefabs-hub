@@ -41,13 +41,13 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.GetPendingResponse;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
-import dev.atlasia.prefabuploader.prefab.PendingPrefab;
-import dev.atlasia.prefabuploader.prefab.PendingPrefabStore;
-import dev.atlasia.prefabuploader.prefab.PlayerNameCache;
-import dev.atlasia.prefabuploader.prefab.PrefabValidator;
+import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.prefab.PendingPrefab;
+import dev.atlasia.prefabuploader.service.prefab.PendingPrefabStore;
+import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
+import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -93,7 +93,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
     private String search;
   }
 
-  private final HubClient hubClient;
+  private final Client hubClient;
 
   private int page = 0;
   private String searchFilter = "";
@@ -106,7 +106,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
 
   public PrefabValidationPage(
       @Nonnull PlayerRef playerRef,
-      @Nonnull HubClient hubClient,
+      @Nonnull Client hubClient,
       @Nonnull List<PendingPrefab> initial) {
     super(playerRef, CustomPageLifetime.CanDismiss, Data.CODEC);
     this.hubClient = hubClient;

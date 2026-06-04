@@ -16,7 +16,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.prefab;
+package dev.atlasia.prefabuploader.service.prefab;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.universe.PlayerRef;

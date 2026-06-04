@@ -24,8 +24,8 @@ import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -42,9 +42,9 @@ public class ConfigSetupCommand extends AbstractCommand {
   private static final java.awt.Color CODE = new java.awt.Color(0x66, 0xDD, 0x77);
   private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
 
-  private final HubClient client;
+  private final Client client;
 
-  public ConfigSetupCommand(@Nonnull HubClient client) {
+  public ConfigSetupCommand(@Nonnull Client client) {
     super("setup", "server.prefabsuploader.command.config.setup.description");
     this.client = client;
     requirePermission("projectatlasia.prefabsuploader.command.prefabsuploader.config.setup");
@@ -110,7 +110,7 @@ public class ConfigSetupCommand extends AbstractCommand {
       return;
     }
     PlayerRef admin = context.senderAs(PlayerRef.class);
-    HubClient.Window window = client.openWindow(180);
+    Client.Window window = client.openWindow(180);
     Runnable dereg =
         client.awaitConfigured(
             () -> {

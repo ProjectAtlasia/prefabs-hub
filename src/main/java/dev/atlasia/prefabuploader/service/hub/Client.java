@@ -16,7 +16,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.client;
+package dev.atlasia.prefabuploader.service.hub;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import dev.atlasia.prefabuploader.config.PluginConfig;
@@ -74,14 +74,14 @@ import java.util.logging.Level;
  * fetch the initial {@link ConfigState}, and inside short listening windows (setup/link) that wait
  * for hub events. Also downloads directly from the Discord CDN.
  */
-public final class HubClient {
+public final class Client {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long MAX_MSG = 16L << 20;
 
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
   private static final int CDN_MAX_BYTES =
-      dev.atlasia.prefabuploader.prefab.PrefabValidator.MAX_BYTES;
+      dev.atlasia.prefabuploader.service.prefab.PrefabValidator.MAX_BYTES;
 
   /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
   private static final long IDLE_TIMEOUT_SEC = 30;
@@ -145,7 +145,7 @@ public final class HubClient {
 
   private record HubState(boolean configured, String inviteUrl) {}
 
-  public HubClient(PluginConfig config) {
+  public Client(PluginConfig config) {
     this.config = config;
   }
 

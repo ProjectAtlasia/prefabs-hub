@@ -21,10 +21,10 @@ package dev.atlasia.prefabuploader;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
-import dev.atlasia.prefabuploader.broadcast.SetupBroadcaster;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.command.PrefabsUploaderCommand;
 import dev.atlasia.prefabuploader.config.PluginConfig;
+import dev.atlasia.prefabuploader.service.broadcast.SetupBroadcaster;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -41,7 +41,7 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
   private static final String MOD_FOLDER = "ProjectAtlasia_PrefabsUploader";
 
   private PluginConfig config;
-  private HubClient hubClient;
+  private Client hubClient;
   private SetupBroadcaster broadcaster;
 
   public PrefabsUploaderPlugin(@Nonnull JavaPluginInit init) {
@@ -72,7 +72,7 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
     LOG.at(Level.INFO).log("[PrefabsUploader] setup()");
 
     this.config = PluginConfig.load(dataDir());
-    this.hubClient = new HubClient(config);
+    this.hubClient = new Client(config);
     this.broadcaster = new SetupBroadcaster(hubClient, config);
 
     this.getCommandRegistry().registerCommand(new PrefabsUploaderCommand(hubClient, config));

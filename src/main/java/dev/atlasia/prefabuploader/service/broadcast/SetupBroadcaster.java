@@ -16,13 +16,13 @@
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
-package dev.atlasia.prefabuploader.broadcast;
+package dev.atlasia.prefabuploader.service.broadcast;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.universe.Universe;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.config.PluginConfig;
+import dev.atlasia.prefabuploader.service.hub.Client;
 import java.util.logging.Level;
 
 /**
@@ -37,12 +37,12 @@ public final class SetupBroadcaster {
   private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
   private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
 
-  private final HubClient client;
+  private final Client client;
   private final PluginConfig config;
   private Thread thread;
   private volatile boolean running = false;
 
-  public SetupBroadcaster(HubClient client, PluginConfig config) {
+  public SetupBroadcaster(Client client, PluginConfig config) {
     this.client = client;
     this.config = config;
   }

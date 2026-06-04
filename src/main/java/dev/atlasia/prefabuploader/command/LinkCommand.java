@@ -24,9 +24,9 @@ import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
-import dev.atlasia.prefabuploader.prefab.PlayerNameCache;
+import dev.atlasia.prefabuploader.service.hub.Client;
+import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -45,9 +45,9 @@ public class LinkCommand extends AbstractCommand {
   private static final java.awt.Color CODE = new java.awt.Color(0x66, 0xDD, 0x77);
   private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
 
-  private final HubClient client;
+  private final Client client;
 
-  public LinkCommand(@Nonnull HubClient client) {
+  public LinkCommand(@Nonnull Client client) {
     super("link", "server.prefabsuploader.command.link.description");
     this.client = client;
   }
@@ -105,7 +105,7 @@ public class LinkCommand extends AbstractCommand {
     }
     context.sendMessage(tagged(Message.translation("server.prefabsuploader.link.waiting")));
 
-    HubClient.Window window = client.openWindow(LINK_WINDOW_SEC);
+    Client.Window window = client.openWindow(LINK_WINDOW_SEC);
     Runnable dereg =
         client.awaitPlayerLinked(
             uuid,
