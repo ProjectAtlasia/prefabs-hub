@@ -64,9 +64,9 @@ jobs:
       - name: Dependency-Check
         uses: dependency-check/Dependency-Check_Action@main
         env:
-          # setup-java exports a host JAVA_HOME that doesn't exist inside the action's container;
-          # blank it so the action uses its own bundled JDK.
-          JAVA_HOME: ""
+          # setup-java sets JAVA_HOME to a host path that doesn't exist inside the action's
+          # container. Per the action's README, point it at the JDK bundled in the Depcheck image.
+          JAVA_HOME: /opt/jdk
         with:
           project: prefabs-uploader-plugin
           path: build/libs
