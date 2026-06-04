@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -77,7 +77,7 @@ public class LinkCommand extends AbstractCommand {
             }
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log(
-                "[PrefabsUploader] link/playerImport falhou: %s", t.getMessage());
+                "[PrefabsUploader] link/playerImport failed: %s", t.getMessage());
             context.sendMessage(
                 tagged(Message.translation("server.prefabsuploader.link.hubError")));
           }
@@ -130,7 +130,7 @@ public class LinkCommand extends AbstractCommand {
       }
     } catch (Throwable t) {
       LOG.at(Level.FINE).log(
-          "[PrefabsUploader] confirmação in-game de link falhou: %s", t.getMessage());
+          "[PrefabsUploader] in-game link confirmation failed: %s", t.getMessage());
     }
   }
 

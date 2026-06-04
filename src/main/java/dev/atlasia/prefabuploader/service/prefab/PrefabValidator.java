@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -52,40 +52,38 @@ public final class PrefabValidator {
 
   public static Result validate(byte[] data) {
     if (data == null || data.length == 0) {
-      return Result.reject("arquivo vazio");
+      return Result.reject("empty file");
     }
     if (data.length > MAX_BYTES) {
-      return Result.reject("excede o limite de tamanho (" + (MAX_BYTES >> 20) + " MiB)");
+      return Result.reject("exceeds the size limit (" + (MAX_BYTES >> 20) + " MiB)");
     }
 
     BsonDocument doc;
     try {
       doc = BsonDocument.parse(new String(data, StandardCharsets.UTF_8));
     } catch (RuntimeException e) {
-      return Result.reject("JSON/BSON malformado: " + e.getMessage());
+      return Result.reject("malformed JSON/BSON: " + e.getMessage());
     }
 
     BlockSelection sel;
     try {
       sel = SelectionPrefabSerializer.deserialize(doc);
     } catch (Throwable t) {
-      LOG.at(Level.WARNING).log("[PrefabsUploader] deserialize falhou: %s", t.getMessage());
-      return Result.reject("prefab inválido (deserialize falhou)");
+      LOG.at(Level.WARNING).log("[PrefabsUploader] deserialize failed: %s", t.getMessage());
+      return Result.reject("invalid prefab (deserialize failed)");
     }
     if (sel == null) {
-      return Result.reject("prefab vazio após deserialize");
+      return Result.reject("empty prefab after deserialize");
     }
 
     if (sel.getBlockCount() > MAX_BLOCKS) {
-      return Result.reject("blocos demais: " + sel.getBlockCount() + " > " + MAX_BLOCKS);
+      return Result.reject("too many blocks: " + sel.getBlockCount() + " > " + MAX_BLOCKS);
     }
     if (sel.getSelectionVolume() > MAX_VOLUME) {
-      return Result.reject(
-          "volume grande demais: " + sel.getSelectionVolume() + " > " + MAX_VOLUME);
+      return Result.reject("volume too large: " + sel.getSelectionVolume() + " > " + MAX_VOLUME);
     }
     if (sel.getEntityCount() > 0) {
-      return Result.reject(
-          "prefab contém entidades (" + sel.getEntityCount() + ") — não permitido");
+      return Result.reject("prefab contains entities (" + sel.getEntityCount() + ") — not allowed");
     }
 
     return Result.accept(sel);

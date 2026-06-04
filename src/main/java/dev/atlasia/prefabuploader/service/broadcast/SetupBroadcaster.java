@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -71,13 +71,13 @@ public final class SetupBroadcaster {
                     continue;
                   }
                   Universe.get().sendMessage(buildMessage());
-                  LOG.at(Level.INFO).log("[PrefabsUploader] broadcast de setup enviado");
+                  LOG.at(Level.INFO).log("[PrefabsUploader] setup broadcast sent");
                 } catch (InterruptedException e) {
                   Thread.currentThread().interrupt();
                   break;
                 } catch (Throwable t) {
                   LOG.at(Level.WARNING).log(
-                      "[PrefabsUploader] broadcast falhou: %s", t.getMessage());
+                      "[PrefabsUploader] broadcast failed: %s", t.getMessage());
                 }
               }
             },
@@ -85,7 +85,7 @@ public final class SetupBroadcaster {
     thread.setDaemon(true);
     thread.start();
     LOG.at(Level.INFO).log(
-        "[PrefabsUploader] broadcaster iniciado (intervalo %ds)", INTERVAL_MS / 1000);
+        "[PrefabsUploader] broadcaster started (interval %ds)", INTERVAL_MS / 1000);
   }
 
   private Message buildMessage() {

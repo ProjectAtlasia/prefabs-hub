@@ -28,7 +28,7 @@ spotless {
         licenseHeader(
             """
             /*
-             * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+             * PrefabsUploader — sends a player's local prefabs to the Hytale server.
              * Copyright (C) 2026 ProjectAtlasia
              *
              * This program is free software: you can redistribute it and/or modify

@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -72,7 +72,7 @@ public class ValidateCommand extends AbstractCommand {
                 items = resp.getItemsList().stream().map(PendingPrefab::fromProto).toList();
               } catch (Throwable t) {
                 LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] ListPending falhou: %s", t.getMessage());
+                    "[PrefabsUploader] ListPending failed: %s", t.getMessage());
                 sender.sendMessage(
                     Message.join(
                         Message.raw("[PrefabsUploader] "),

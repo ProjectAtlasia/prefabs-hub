@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -74,7 +74,7 @@ public final class PendingPrefabStore {
   public void approve(PendingPrefab p, byte[] data, String adminName, String adminUuid)
       throws IOException {
     if (data == null || data.length == 0) {
-      throw new IOException("sem dados do prefab (não baixado?)");
+      throw new IOException("no prefab data (not downloaded?)");
     }
     String owner = ownerDir(p);
     String base = baseName(p.prefabName());
@@ -88,15 +88,15 @@ public final class PendingPrefabStore {
         String issues = nativeValidate(temp);
         if (issues != null && !issues.isBlank()) {
           LOG.at(Level.INFO).log(
-              "[PrefabsUploader] aprovação rejeitada pelo engine (%s): %s", display, issues);
-          throw new IOException("rejeitado pela validação do servidor: " + issues);
+              "[PrefabsUploader] approval rejected by the engine (%s): %s", display, issues);
+          throw new IOException("rejected by server validation: " + issues);
         }
       } finally {
         try {
           Files.deleteIfExists(temp);
         } catch (Throwable t) {
           LOG.at(Level.FINE).log(
-              "[PrefabsUploader] falha ao apagar temp %s: %s", temp, t.getMessage());
+              "[PrefabsUploader] failed to delete temp %s: %s", temp, t.getMessage());
         }
       }
 
@@ -107,20 +107,20 @@ public final class PendingPrefabStore {
       Path liveRootReal = liveRoot.toRealPath();
       Path destParentReal = dest.getParent().toRealPath();
       if (!destParentReal.startsWith(liveRootReal)) {
-        throw new IOException("destino inválido (fora da árvore de prefabs)");
+        throw new IOException("invalid destination (outside the prefabs tree)");
       }
       String destName = dest.getFileName().toString();
       if (destName.contains("/") || destName.contains("\\") || destName.contains("..")) {
-        throw new IOException("nome de destino inválido");
+        throw new IOException("invalid destination name");
       }
       if (Files.isSymbolicLink(dest)) {
-        throw new IOException("destino é symlink — recusado");
+        throw new IOException("destination is a symlink — refused");
       }
 
       Files.write(dest, data);
 
       LOG.at(Level.INFO).log(
-          "[PrefabsUploader] AUDITORIA aprovar: admin=%s(%s) prefab=%s owner=%s dest=%s bytes=%d at=%d",
+          "[PrefabsUploader] AUDIT approve: admin=%s(%s) prefab=%s owner=%s dest=%s bytes=%d at=%d",
           safe(adminName),
           safe(adminUuid),
           base,
@@ -146,8 +146,8 @@ public final class PendingPrefabStore {
       return PrefabBufferValidator.validate(buffer, VALIDATION);
     } catch (Throwable t) {
       LOG.at(Level.WARNING).withCause(t).log(
-          "[PrefabsUploader] validação nativa indisponível — rejeitando aprovação (fail-secure)");
-      return "validação nativa indisponível";
+          "[PrefabsUploader] native validation unavailable — rejecting approval (fail-secure)");
+      return "native validation unavailable";
     }
   }
 
