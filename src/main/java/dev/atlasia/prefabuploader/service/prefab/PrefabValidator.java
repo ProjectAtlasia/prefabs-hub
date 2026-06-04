@@ -33,7 +33,6 @@ public final class PrefabValidator {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
 
-  public static final int MAX_BYTES = 8 << 20;
   public static final int MAX_BLOCKS = 262_144;
   public static final int MAX_VOLUME = 262_144;
 
@@ -50,12 +49,19 @@ public final class PrefabValidator {
 
   private PrefabValidator() {}
 
-  public static Result validate(byte[] data) {
+  /**
+   * Validates an incoming prefab against the structural limits and the owner-configured byte size.
+   *
+   * @param data the raw {@code .prefab.json} bytes
+   * @param maxBytes the maximum accepted size in bytes (configured by the server owner)
+   * @return a {@link Result} carrying the parsed selection, or a rejection reason
+   */
+  public static Result validate(byte[] data, int maxBytes) {
     if (data == null || data.length == 0) {
       return Result.reject("empty file");
     }
-    if (data.length > MAX_BYTES) {
-      return Result.reject("exceeds the size limit (" + (MAX_BYTES >> 20) + " MiB)");
+    if (data.length > maxBytes) {
+      return Result.reject("exceeds the size limit (" + (maxBytes >> 20) + " MiB)");
     }
 
     BsonDocument doc;

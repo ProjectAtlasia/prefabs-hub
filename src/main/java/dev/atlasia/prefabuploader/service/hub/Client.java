@@ -38,7 +38,6 @@ import dev.atlasia.prefabuploader.grpc.ResolvePendingRequest;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.grpc.SetupRequest;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
-import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -93,7 +92,6 @@ public final class Client {
   private static final long RPC_DEADLINE_SEC = 10;
 
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
-  private static final int CDN_MAX_BYTES = PrefabValidator.MAX_BYTES;
 
   /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
   private static final long IDLE_TIMEOUT_SEC = 30;
@@ -167,6 +165,11 @@ public final class Client {
    */
   public ExecutorService io() {
     return ioExecutor;
+  }
+
+  /** The owner-configured maximum prefab upload size in bytes. */
+  public int maxPrefabBytes() {
+    return config.maxPrefabBytes();
   }
 
   public void start() {
@@ -644,7 +647,7 @@ public final class Client {
   /**
    * Downloads the {@code .prefab.json} directly from the Discord CDN (HTTP GET on the URL returned
    * by {@link #getPending}). Blocking — run off the world thread (use {@link #io()}). Reads in a
-   * streaming fashion and aborts if the body exceeds {@link #CDN_MAX_BYTES}.
+   * streaming fashion and aborts if the body exceeds the owner-configured max prefab size.
    *
    * @param url the HTTPS download URL
    * @return the downloaded bytes
@@ -665,7 +668,7 @@ public final class Client {
       throw new IOException("download failed (HTTP " + status + ")");
     }
     try (InputStream in = resp.body()) {
-      return readCapped(in);
+      return readCapped(in, config.maxPrefabBytes());
     }
   }
 
@@ -693,21 +696,20 @@ public final class Client {
   }
 
   /**
-   * Reads the stream fully into memory, aborting once the body exceeds {@link #CDN_MAX_BYTES}.
+   * Reads the stream fully into memory, aborting once the body exceeds {@code maxBytes}.
    *
+   * @param maxBytes the maximum accepted body size in bytes
    * @throws IOException if the body exceeds the size cap or a read fails
    */
-  private static byte[] readCapped(InputStream in) throws IOException {
-    try (ByteArrayOutputStream out =
-        new ByteArrayOutputStream(Math.min(CDN_MAX_BYTES, 64 * 1024))) {
+  private static byte[] readCapped(InputStream in, int maxBytes) throws IOException {
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 64 * 1024))) {
       byte[] buf = new byte[16 * 1024];
       int total = 0;
       int n;
       while ((n = in.read(buf)) != -1) {
         total += n;
-        if (total > CDN_MAX_BYTES) {
-          throw new IOException(
-              "prefab exceeds the size limit (" + (CDN_MAX_BYTES >> 20) + " MiB)");
+        if (total > maxBytes) {
+          throw new IOException("prefab exceeds the size limit (" + (maxBytes >> 20) + " MiB)");
         }
         out.write(buf, 0, n);
       }

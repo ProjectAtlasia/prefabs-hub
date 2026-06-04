@@ -230,7 +230,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               try {
                 GetPendingResponse gp = hubClient.getPending(target.id());
                 bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
-                result = PrefabValidator.validate(bytes);
+                result = PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
               } catch (Throwable t) {
                 LOG.at(Level.WARNING).log(
                     "[PrefabsUploader] preview download/validate failed (%s): %s",
@@ -298,7 +298,8 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 if (bytes == null) {
                   GetPendingResponse gp = hubClient.getPending(sel.id());
                   bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
-                  PrefabValidator.Result rv = PrefabValidator.validate(bytes);
+                  PrefabValidator.Result rv =
+                      PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
                   if (!rv.ok()) {
                     throw new IOException(rv.error());
                   }

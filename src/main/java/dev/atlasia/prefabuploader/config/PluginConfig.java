@@ -67,6 +67,10 @@ public final class PluginConfig {
     DEFAULT_ALLOW_INSECURE = allowInsecure;
   }
 
+  private static final int DEFAULT_MAX_PREFAB_MB = 8;
+  private static final int MIN_MAX_PREFAB_MB = 1;
+  private static final int MAX_MAX_PREFAB_MB = 64;
+
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
   private final Path file;
@@ -75,6 +79,7 @@ public final class PluginConfig {
   private String hubAddress;
   private boolean hubTls;
   private boolean hubInsecure;
+  private int maxPrefabBytes;
   private String authToken;
   private boolean pairMessage;
   private String inviteUrl;
@@ -108,6 +113,9 @@ public final class PluginConfig {
       hubAddress = props.getProperty("hub.address", DEFAULT_HUB);
       hubTls = Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(DEFAULT_TLS)));
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
+      maxPrefabBytes =
+          parseMaxPrefabBytes(
+              props.getProperty("prefab.max.size.mb", String.valueOf(DEFAULT_MAX_PREFAB_MB)));
       authToken = props.getProperty("auth.token", "");
       pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
       inviteUrl = props.getProperty("discord.invite.url", "");
@@ -117,6 +125,7 @@ public final class PluginConfig {
       hubAddress = DEFAULT_HUB;
       hubTls = DEFAULT_TLS;
       hubInsecure = false;
+      maxPrefabBytes = DEFAULT_MAX_PREFAB_MB << 20;
       authToken = "";
       pairMessage = true;
       inviteUrl = "";
@@ -145,6 +154,23 @@ public final class PluginConfig {
     } catch (IOException e) {
       return false;
     }
+  }
+
+  /**
+   * Parses the configured max prefab size (in MB), clamped to {@code [MIN..MAX]} and converted to
+   * bytes. Falls back to the default on a malformed value.
+   */
+  private static int parseMaxPrefabBytes(String rawMb) {
+    int mb;
+    try {
+      mb = Integer.parseInt(rawMb.trim());
+    } catch (NumberFormatException e) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] invalid prefab.max.size.mb='%s'; using default", rawMb);
+      mb = DEFAULT_MAX_PREFAB_MB;
+    }
+    mb = Math.max(MIN_MAX_PREFAB_MB, Math.min(MAX_MAX_PREFAB_MB, mb));
+    return mb << 20;
   }
 
   /** Writes the commented config file from the current values (atomic write, 0600 permissions). */
@@ -191,6 +217,10 @@ public final class PluginConfig {
         "# only -- official/release builds ignore this and always validate). Needs hub.tls=true.\n");
     b.append("hub.insecure=").append(hubInsecure).append('\n');
     b.append("\n");
+    b.append("# Max size (in MB) of a prefab a player may upload; anything larger is rejected.\n");
+    b.append("# Clamped to [1..64]. Default 8.\n");
+    b.append("prefab.max.size.mb=").append(maxPrefabBytes >> 20).append('\n');
+    b.append("\n");
     b.append("# pair.message=false turns off the automatic chat prompt to pair the server.\n");
     b.append("# The commands keep working normally (it only silences the broadcast).\n");
     b.append("pair.message=").append(pairMessage).append('\n');
@@ -234,6 +264,11 @@ public final class PluginConfig {
    */
   public boolean insecureTlsAllowed() {
     return DEFAULT_ALLOW_INSECURE;
+  }
+
+  /** Maximum prefab upload size in bytes, configured by the server owner. */
+  public int maxPrefabBytes() {
+    return maxPrefabBytes;
   }
 
   public String authToken() {
