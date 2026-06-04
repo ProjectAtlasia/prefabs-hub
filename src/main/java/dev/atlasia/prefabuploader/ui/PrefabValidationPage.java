@@ -98,7 +98,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
   private int selectedIndex = -1;
   private List<PendingPrefab> cached;
 
-  private volatile byte[] selectedBytes;
+  private volatile BlockSelection selectedSelection;
 
   private volatile int selectionGen = 0;
 
@@ -200,7 +200,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
       selectedIndex = -1;
     }
 
-    selectedBytes = null;
+    selectedSelection = null;
     int gen = ++selectionGen;
     refresh();
 
@@ -254,14 +254,13 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
                 return;
               }
 
-              final byte[] okBytes = bytes;
               final BlockSelection sel = result.selection();
               runOnWorld(
                   () -> {
                     if (gen != selectionGen) {
                       return;
                     }
-                    selectedBytes = okBytes;
+                    selectedSelection = sel;
                     sendPreview(target, sel);
                     refresh();
                   });
@@ -273,14 +272,14 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
    * hands it to {@link PrefabBlockReviewPage} where the admin curates the blocks and approves.
    */
   private void handleReview() {
-    PendingPrefab sel = selected();
-    if (sel == null) {
+    PendingPrefab pending = selected();
+    if (pending == null) {
       sendUpdate();
       return;
     }
-    byte[] have = selectedBytes;
+    BlockSelection have = selectedSelection;
     if (have != null) {
-      runOnWorld(() -> openReview(sel, have));
+      runOnWorld(() -> openReview(pending, have));
       return;
     }
     final int gen = selectionGen;
@@ -289,26 +288,26 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
         .execute(
             () -> {
               try {
-                GetPendingResponse gp = hubClient.getPending(sel.id());
+                GetPendingResponse gp = hubClient.getPending(pending.id());
                 byte[] bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
                 PrefabValidator.Result rv =
                     PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
                 if (!rv.ok()) {
                   throw new IOException(rv.error());
                 }
-                final byte[] finalBytes = bytes;
+                final BlockSelection parsed = rv.selection();
                 runOnWorld(
                     () -> {
                       if (gen != selectionGen) {
                         return;
                       }
-                      selectedBytes = finalBytes;
-                      openReview(sel, finalBytes);
+                      selectedSelection = parsed;
+                      openReview(pending, parsed);
                     });
               } catch (Throwable t) {
                 final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
-                    "[PrefabsUploader] failed to load prefab %s for review", sel.prefabName());
+                    "[PrefabsUploader] failed to load prefab %s for review", pending.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen == selectionGen) {
@@ -321,10 +320,10 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
   }
 
   /**
-   * Opens the block-review page for the given prefab and downloaded bytes. Must run on the world
-   * thread.
+   * Opens the block-review page for the given prefab and its already-parsed selection. Must run on
+   * the world thread.
    */
-  private void openReview(PendingPrefab pending, byte[] data) {
+  private void openReview(PendingPrefab pending, BlockSelection selection) {
     World w = world();
     if (w == null) {
       return;
@@ -339,7 +338,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
         .openCustomPage(
             playerRef.getReference(),
             store,
-            new PrefabBlockReviewPage(playerRef, hubClient, pending, data));
+            new PrefabBlockReviewPage(playerRef, hubClient, pending, selection));
   }
 
   /** Rejects the selection via resolvePending(false) on the hub (no disk write). */
@@ -350,7 +349,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
       return;
     }
     final String adminName = playerRef.getUsername();
-    selectedBytes = null;
+    selectedSelection = null;
 
     hubClient
         .io()
@@ -418,7 +417,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
   @Override
   public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
     selectionGen++;
-    selectedBytes = null;
+    selectedSelection = null;
     clearPreview();
   }
 
@@ -460,7 +459,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
   private void deselect() {
     selectedIndex = -1;
     selectionGen++;
-    selectedBytes = null;
+    selectedSelection = null;
   }
 
   /** Removes a pending prefab from the local list after approval or rejection. */

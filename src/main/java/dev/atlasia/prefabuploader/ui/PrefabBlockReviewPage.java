@@ -27,7 +27,6 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
 import com.hypixel.hytale.server.core.Message;
-import com.hypixel.hytale.server.core.prefab.config.SelectionPrefabSerializer;
 import com.hypixel.hytale.server.core.prefab.selection.standard.BlockSelection;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
@@ -41,22 +40,21 @@ import dev.atlasia.prefabuploader.service.prefab.PendingPrefabStore;
 import dev.atlasia.prefabuploader.service.prefab.PrefabBlockFilter;
 import dev.atlasia.prefabuploader.service.prefab.PrefabBlockManifest;
 import java.awt.Color;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
-import org.bson.BsonDocument;
 
 /**
  * Admin "Block Review" UI: lists every block/fluid type in a pending prefab with its count and an
  * allow/block toggle, then saves a filtered copy that keeps only the allowed types (the rest are
  * dropped). This is the mandatory step before a prefab is approved into live storage.
  *
- * <p>The selection is deserialized once on the world thread; toggling and the final filter/approve
- * all run on the world thread, while the blocking hub RPC runs on the {@link Client} I/O executor.
+ * <p>It receives the already-parsed selection from the validation page; toggling and the final
+ * filter/approve run on the world thread, while the blocking hub RPC runs on the {@link Client} I/O
+ * executor.
  */
 public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewPage.Data> {
 
@@ -84,9 +82,8 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
 
   private final Client hubClient;
   private final PendingPrefab pending;
-  private final byte[] bytes;
+  private final BlockSelection selection;
 
-  private BlockSelection selection;
   private List<PrefabBlockManifest.Entry> entries = List.of();
   private boolean[] allowed = new boolean[0];
   private boolean loaded;
@@ -98,11 +95,11 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
       @Nonnull PlayerRef playerRef,
       @Nonnull Client hubClient,
       @Nonnull PendingPrefab pending,
-      @Nonnull byte[] bytes) {
+      @Nonnull BlockSelection selection) {
     super(playerRef, CustomPageLifetime.CanDismiss, Data.CODEC);
     this.hubClient = hubClient;
     this.pending = pending;
-    this.bytes = bytes;
+    this.selection = selection;
   }
 
   @Override
@@ -161,23 +158,20 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
     sendUpdate();
   }
 
-  /** Deserializes the prefab and builds the block manifest once, on the world thread. */
+  /** Builds the block manifest from the already-parsed selection once, on the world thread. */
   private void ensureLoaded() {
     if (loaded) {
       return;
     }
     loaded = true;
     try {
-      selection =
-          SelectionPrefabSerializer.deserialize(
-              BsonDocument.parse(new String(bytes, StandardCharsets.UTF_8)));
       entries = PrefabBlockManifest.of(selection);
       allowed = new boolean[entries.size()];
       Arrays.fill(allowed, true);
     } catch (Throwable t) {
       loadFailed = true;
       LOG.at(Level.WARNING).withCause(t).log(
-          "[PrefabsUploader] block review failed to load prefab %s", pending.prefabName());
+          "[PrefabsUploader] block review failed to read prefab %s", pending.prefabName());
     }
   }
 
