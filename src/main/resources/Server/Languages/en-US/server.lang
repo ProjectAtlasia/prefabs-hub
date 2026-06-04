@@ -38,6 +38,18 @@ prefabsuploader.config.setup.hubError = Failed to reach the hub. Make sure the b
 # ---- /prefabs-uploader validate ----
 prefabsuploader.validate.notplayer = Only players can open the validation UI.
 
+# ---- /prefabs-uploader validate: block review ----
+prefabsuploader.blockreview.title = Review Blocks
+prefabsuploader.blockreview.hint = Click a block to allow or block it. Only allowed blocks are saved; suspicious ones are highlighted.
+prefabsuploader.blockreview.pageInfo = Block types: {count}  |  Page {page}/{pages}
+prefabsuploader.blockreview.summary = {allowed} allowed, {blocked} blocked
+prefabsuploader.blockreview.confirm = Confirm & Approve
+prefabsuploader.blockreview.saving = Saving…
+prefabsuploader.blockreview.approved = Saved {kept}/{total} block types.
+prefabsuploader.blockreview.approvedChat = Approved {name} (curated).
+prefabsuploader.blockreview.error = error: {error}
+prefabsuploader.blockreview.loadError = Failed to read the prefab blocks.
+
 # ---- Setup broadcast (server not paired) ----
 prefabsuploader.broadcast.setup.prefix = Configure the Discord connection for this plugin to work.
 prefabsuploader.broadcast.setup.noHub = Use /prefabs-uploader config setup once the hub is available.
@@ -48,7 +60,7 @@ prefabsuploader.broadcast.setup.installButton = [ Add bot to Discord ]
 prefabsuploader.ui.title = Prefab Validation
 prefabsuploader.ui.searchPlaceholder = Search by author or name...
 prefabsuploader.ui.previewTitle = Preview
-prefabsuploader.ui.accept = Approve
+prefabsuploader.ui.accept = Review & Approve
 prefabsuploader.ui.delete = Delete
 prefabsuploader.ui.prev = < Prev
 prefabsuploader.ui.next = Next >

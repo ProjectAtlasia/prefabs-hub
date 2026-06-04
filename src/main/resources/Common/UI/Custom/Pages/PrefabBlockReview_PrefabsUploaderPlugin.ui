@@ -1,0 +1,190 @@
+$C = "../Common.ui";
+
+// UI "Revisao de Blocos" (admin) — PrefabsUploader. Autor: astahjmo (Astaroth).
+// Lista os tipos de bloco/fluido da prefab com contagem; o admin clica numa linha pra permitir/
+// bloquear, e "Confirmar" salva so com os blocos permitidos. 20 linhas paginadas (#Row0..#Row19).
+
+$C.@PageOverlay {}
+
+$C.@Container {
+  Anchor: (Width: 760, Height: 720);
+
+  #Title {
+    Group { $C.@Title { @Text = %server.prefabsuploader.blockreview.title; } }
+  }
+
+  #Content {
+    LayoutMode: Top;
+    Padding: (Horizontal: 16, Bottom: 16, Top: 4);
+
+    Label #PrefabName { Anchor: (Height: 22, Bottom: 2);
+      Style: (FontSize: 15, RenderBold: true, TextColor: #88ccff, HorizontalAlignment: Center); }
+    Label { Anchor: (Height: 18, Bottom: 6);
+      Style: (FontSize: 12, TextColor: #94a7bb, HorizontalAlignment: Center);
+      Text: %server.prefabsuploader.blockreview.hint; }
+    Label #PageInfo { Anchor: (Height: 18, Bottom: 6);
+      Style: (FontSize: 13, RenderBold: true, TextColor: #88ccff); }
+
+    Group #BlockList {
+      FlexWeight: 1;
+      LayoutMode: TopScrolling;
+      ScrollbarStyle: $C.@DefaultScrollbarStyle;
+      Padding: (Horizontal: 4);
+
+      Button #Row0 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState0 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName0  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount0 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row1 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState1 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName1  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount1 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row2 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState2 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName2  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount2 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row3 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState3 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName3  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount3 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row4 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState4 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName4  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount4 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row5 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState5 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName5  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount5 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row6 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState6 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName6  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount6 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row7 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState7 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName7  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount7 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row8 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState8 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName8  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount8 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row9 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState9 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName9  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount9 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row10 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState10 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName10  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount10 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row11 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState11 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName11  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount11 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row12 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState12 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName12  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount12 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row13 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState13 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName13  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount13 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row14 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState14 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName14  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount14 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row15 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState15 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName15  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount15 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row16 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState16 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName16  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount16 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row17 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState17 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName17  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount17 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row18 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState18 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName18  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount18 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+      Button #Row19 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
+        Group { LayoutMode: Center; Padding: (Horizontal: 12);
+          Label #RowState19 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
+          Label #RowName19  { FlexWeight: 1; Style: (FontSize: 14); }
+          Label #RowCount19 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: Right); }
+        }
+      }
+    }
+
+    Group { Anchor: (Height: 34, Top: 8); LayoutMode: Center;
+      $C.@SecondaryTextButton #PrevButton { @Anchor = (Right: 4, Width: 90); Text: %server.prefabsuploader.ui.prev; }
+      $C.@SecondaryTextButton #NextButton { @Anchor = (Left: 4, Width: 90); Text: %server.prefabsuploader.ui.next; }
+    }
+
+    Label #Summary { Anchor: (Height: 20, Top: 8);
+      Style: (FontSize: 13, RenderBold: true, TextColor: #cccccc, HorizontalAlignment: Center); }
+
+    Group { Anchor: (Height: 40, Top: 8); LayoutMode: Center;
+      $C.@TextButton #Confirm { @Anchor = (Width: 280); Text: %server.prefabsuploader.blockreview.confirm; }
+    }
+  }
+}
+
+$C.@BackButton {}
