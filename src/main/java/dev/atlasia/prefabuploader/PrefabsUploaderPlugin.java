@@ -1,5 +1,5 @@
 /*
- * PrefabsUploader — envia prefabs locais do jogador para o servidor Hytale.
+ * PrefabsUploader — sends a player's local prefabs to the Hytale server.
  * Copyright (C) 2026 ProjectAtlasia
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,6 +25,8 @@ import dev.atlasia.prefabuploader.command.PrefabsUploaderCommand;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.service.broadcast.SetupBroadcaster;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -54,17 +56,17 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
    *
    * @return the mod data directory path
    */
-  private java.nio.file.Path dataDir() {
+  private Path dataDir() {
     try {
-      java.nio.file.Path jar = getFile();
+      Path jar = getFile();
       if (jar != null && jar.getParent() != null) {
         return jar.getParent().resolve(MOD_FOLDER);
       }
     } catch (Throwable t) {
       LOG.at(Level.WARNING).log(
-          "[PrefabsUploader] não resolvi a pasta do mod via getFile(): %s", t.getMessage());
+          "[PrefabsUploader] failed to resolve the mod folder via getFile(): %s", t.getMessage());
     }
-    return java.nio.file.Paths.get("mods", MOD_FOLDER);
+    return Paths.get("mods", MOD_FOLDER);
   }
 
   @Override
@@ -82,26 +84,40 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
       broadcaster.start();
     } catch (Throwable t) {
       LOG.at(Level.SEVERE).log(
-          "[PrefabsUploader] falha ao iniciar integração (plugin segue carregado): %s",
+          "[PrefabsUploader] failed to start integration (plugin stays loaded): %s",
           t.getMessage());
     }
 
     LOG.at(Level.INFO).log(
-        "[PrefabsUploader] habilitado (server.id=%s, hub=%s).",
+        "[PrefabsUploader] enabled (server.id=%s, hub=%s).",
         config.serverId(), config.hubAddress());
   }
 
   @Override
   protected void shutdown() {
     LOG.at(Level.INFO).log("[PrefabsUploader] shutdown()");
-    if (broadcaster != null) {
-      broadcaster.stop();
+    shutdownStep(broadcaster, "broadcaster", () -> broadcaster.stop());
+    shutdownStep(hubClient, "hub client", () -> hubClient.shutdown());
+    shutdownStep(config, "config", () -> config.save());
+  }
+
+  /**
+   * Runs a shutdown action only if its component was initialized, isolating failures so one
+   * component's error never blocks the others.
+   *
+   * @param component the component to tear down, or {@code null} if never initialized
+   * @param name component name used in the failure log
+   * @param action the teardown action
+   */
+  private static void shutdownStep(Object component, String name, Runnable action) {
+    if (component == null) {
+      return;
     }
-    if (hubClient != null) {
-      hubClient.shutdown();
-    }
-    if (config != null) {
-      config.save();
+    try {
+      action.run();
+    } catch (Throwable t) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] failed to shut down %s: %s", name, t.getMessage());
     }
   }
 }
