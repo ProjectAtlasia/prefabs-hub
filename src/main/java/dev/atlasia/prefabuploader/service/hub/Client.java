@@ -93,6 +93,9 @@ public final class Client {
 
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
 
+  /** Overall wall-clock deadline for streaming a CDN body, guarding against slow-trickle reads. */
+  private static final Duration CDN_READ_DEADLINE = Duration.ofSeconds(30);
+
   /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
   private static final long IDLE_TIMEOUT_SEC = 30;
 
@@ -701,17 +704,22 @@ public final class Client {
   }
 
   /**
-   * Reads the stream fully into memory, aborting once the body exceeds {@code maxBytes}.
+   * Reads the stream fully into memory, aborting once the body exceeds {@code maxBytes} or the read
+   * exceeds {@link #CDN_READ_DEADLINE} (slow-trickle guard).
    *
    * @param maxBytes the maximum accepted body size in bytes
-   * @throws IOException if the body exceeds the size cap or a read fails
+   * @throws IOException if the body exceeds the size cap, the read times out, or a read fails
    */
   private static byte[] readCapped(InputStream in, int maxBytes) throws IOException {
+    long deadline = System.nanoTime() + CDN_READ_DEADLINE.toNanos();
     try (ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 64 * 1024))) {
       byte[] buf = new byte[16 * 1024];
       int total = 0;
       int n;
       while ((n = in.read(buf)) != -1) {
+        if (System.nanoTime() > deadline) {
+          throw new IOException("download timed out (slow response)");
+        }
         total += n;
         if (total > maxBytes) {
           throw new IOException("prefab exceeds the size limit (" + (maxBytes >> 20) + " MiB)");
