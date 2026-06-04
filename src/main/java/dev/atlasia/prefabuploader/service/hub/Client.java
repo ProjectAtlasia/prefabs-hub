@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -84,6 +85,9 @@ public final class Client {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long MAX_MSG = 16L << 20;
+
+  /** Upper bound on a hub-supplied pairing token persisted to config (sanity guard). */
+  private static final int MAX_HUB_TOKEN_LEN = 4096;
 
   /** Per-call deadline applied to every blocking unary RPC. */
   private static final long RPC_DEADLINE_SEC = 10;
@@ -801,9 +805,7 @@ public final class Client {
   private void onConfigState(ConfigState cs) {
     String url = cs.getBotInviteUrl().isEmpty() ? state.get().inviteUrl() : cs.getBotInviteUrl();
     state.set(new HubState(cs.getConfigured(), url));
-    if (!cs.getAuthToken().isEmpty()) {
-      config.setAuthToken(cs.getAuthToken());
-    }
+    maybePersistAuthToken(cs.getAuthToken());
     LOG.at(Level.INFO).log(
         "[PrefabsUploader] config updated: configured=%s guild=%s",
         cs.getConfigured(), cs.getGuildId());
@@ -816,6 +818,42 @@ public final class Client {
         runSafe(w);
       }
     }
+  }
+
+  /**
+   * Persists a pairing token supplied by the hub, but only when the connection is authenticated
+   * (the server holds a Hytale identity token) and the token passes a basic format check. The write
+   * runs on the I/O executor so it never blocks the gRPC callback thread. A token offered while
+   * unauthenticated (e.g. the boot fallback that proceeds without identity) is ignored.
+   */
+  private void maybePersistAuthToken(String token) {
+    if (token.isEmpty()) {
+      return;
+    }
+    if (!serverHasIdentityToken()) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] ignoring hub-supplied auth token: server is not authenticated with"
+              + " Hytale yet");
+      return;
+    }
+    if (!isPlausibleHubToken(token)) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] ignoring hub-supplied auth token: failed format check");
+      return;
+    }
+    try {
+      ioExecutor.execute(() -> config.setAuthToken(token));
+    } catch (RejectedExecutionException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] auth token persist skipped (shutting down)");
+    }
+  }
+
+  /** Sanity check on a hub-supplied token: bounded length, no control or whitespace characters. */
+  private static boolean isPlausibleHubToken(String token) {
+    if (token.length() > MAX_HUB_TOKEN_LEN) {
+      return false;
+    }
+    return token.chars().noneMatch(c -> Character.isISOControl(c) || Character.isWhitespace(c));
   }
 
   private void onPlayerLinked(PlayerLinked pl) {
