@@ -26,6 +26,7 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import java.awt.Color;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -38,9 +39,9 @@ import javax.annotation.Nullable;
 public class ConfigSetupCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
-  private static final java.awt.Color CODE = new java.awt.Color(0x66, 0xDD, 0x77);
-  private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
+  private static final Color CODE = new Color(0x66, 0xDD, 0x77);
+  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
   private final Client client;
 

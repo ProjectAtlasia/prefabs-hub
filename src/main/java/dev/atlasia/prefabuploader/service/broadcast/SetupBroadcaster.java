@@ -23,6 +23,7 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.service.hub.Client;
+import java.awt.Color;
 import java.util.logging.Level;
 
 /**
@@ -34,8 +35,8 @@ public final class SetupBroadcaster {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long INTERVAL_MS = 60_000;
 
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
-  private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
+  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
   private final Client client;
   private final PluginConfig config;

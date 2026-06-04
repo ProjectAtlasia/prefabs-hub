@@ -22,6 +22,7 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import dev.atlasia.prefabuploader.config.PluginConfig;
+import java.awt.Color;
 import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -32,7 +33,7 @@ import javax.annotation.Nullable;
  */
 public class PairMessageToggleCommand extends AbstractCommand {
 
-  private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
+  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
 
   private final PluginConfig config;
   private final boolean enabled;
