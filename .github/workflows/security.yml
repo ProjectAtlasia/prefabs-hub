@@ -73,8 +73,11 @@ jobs:
           format: "SARIF"
           # NVD API key is optional; only pass the flag when the secret is set (an empty
           # --nvdApiKey makes the CLI error out). Without a key the NVD update is just slower.
+          # --disableCentral: Maven Central's anonymous search API now returns 403 and the Central
+          # analyzer treats that as fatal. Vuln detection still works from the jar's embedded
+          # coordinates matched against the NVD.
           args: >-
-            --failOnCVSS 8
+            --failOnCVSS 8 --disableCentral
             ${{ secrets.NVD_API_KEY != '' && format('--nvdApiKey {0}', secrets.NVD_API_KEY) || '' }}
       - name: Upload Dependency-Check SARIF
         if: always()
