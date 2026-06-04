@@ -38,7 +38,7 @@ import java.util.logging.Level;
 public final class PluginConfig {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  public static final String PLUGIN_VERSION = "0.1.0"; // x-release-please-version
+  public static final String PLUGIN_VERSION = "0.2.0"; // x-release-please-version
 
   private static final String DEFAULT_HUB;
   private static final boolean DEFAULT_TLS;
