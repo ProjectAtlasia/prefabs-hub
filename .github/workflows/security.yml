@@ -67,9 +67,11 @@ jobs:
           project: prefabs-uploader-plugin
           path: "."
           format: "SARIF"
+          # NVD API key is optional; only pass the flag when the secret is set (an empty
+          # --nvdApiKey makes the CLI error out). Without a key the NVD update is just slower.
           args: >-
             --failOnCVSS 8
-            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            ${{ secrets.NVD_API_KEY != '' && format('--nvdApiKey {0}', secrets.NVD_API_KEY) || '' }}
       - name: Upload Dependency-Check SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
