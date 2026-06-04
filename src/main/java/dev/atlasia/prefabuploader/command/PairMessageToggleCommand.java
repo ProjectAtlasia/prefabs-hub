@@ -22,7 +22,7 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import dev.atlasia.prefabuploader.config.PluginConfig;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
 import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -32,8 +32,6 @@ import javax.annotation.Nullable;
  * broadcast (commands keep working regardless). Persisted in the plugin config. Admin-gated.
  */
 public class PairMessageToggleCommand extends AbstractCommand {
-
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
 
   private final PluginConfig config;
   private final boolean enabled;
@@ -51,8 +49,7 @@ public class PairMessageToggleCommand extends AbstractCommand {
   protected CompletableFuture<Void> execute(@Nonnull CommandContext context) {
     config.setPairMessage(enabled);
     context.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
+        Messages.tagged(
             Message.translation(
                 enabled
                     ? "server.prefabsuploader.config.pairMessage.on"

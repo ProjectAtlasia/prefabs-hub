@@ -21,7 +21,7 @@ package dev.atlasia.prefabuploader.service.messaging;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
 
 /**
  * Renders the in-game message for the {@link PlayerImportResponse} statuses that are not handled by
@@ -29,9 +29,6 @@ import java.awt.Color;
  * a localized key so the in-game text follows the Hytale server language.
  */
 public final class StatusReply {
-
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
-  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
   private StatusReply() {}
 
@@ -44,15 +41,16 @@ public final class StatusReply {
     switch (res.getStatus()) {
       case NOT_CONFIGURED ->
           context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.notConfigured")));
+              Messages.tagged(Message.translation("server.prefabsuploader.status.notConfigured")));
       case NO_UPLOADS_CHANNEL ->
           context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.noUploadsChannel")));
+              Messages.tagged(
+                  Message.translation("server.prefabsuploader.status.noUploadsChannel")));
       case NOT_IN_GUILD -> sendNotInGuild(context, res, inviteFallback);
       case CONTACT_FAILED ->
           context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.contactFailed")));
-      default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
+              Messages.tagged(Message.translation("server.prefabsuploader.status.contactFailed")));
+      default -> context.sendMessage(Messages.tagged(Message.raw(res.getMessage())));
     }
   }
 
@@ -62,20 +60,18 @@ public final class StatusReply {
     String invite = (hub == null || hub.isEmpty()) ? inviteFallback : hub;
     if (invite == null || invite.isEmpty()) {
       context.sendMessage(
-          tagged(Message.translation("server.prefabsuploader.status.inviteNotConfigured")));
+          Messages.tagged(
+              Message.translation("server.prefabsuploader.status.inviteNotConfigured")));
       return;
     }
-    context.sendMessage(tagged(Message.translation("server.prefabsuploader.status.notInGuild")));
+    context.sendMessage(
+        Messages.tagged(Message.translation("server.prefabsuploader.status.notInGuild")));
     context.sendMessage(
         Message.join(
             Message.translation("server.prefabsuploader.status.joinPrompt"),
             Message.raw(" "),
             Message.translation("server.prefabsuploader.link.inviteButton")
-                .color(DISCORD)
+                .color(Messages.DISCORD)
                 .link(invite)));
-  }
-
-  private static Message tagged(Message msg) {
-    return Message.join(Message.raw("[PrefabsUploader] ").color(TAG), msg);
   }
 }

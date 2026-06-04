@@ -41,7 +41,6 @@ import java.util.logging.Level;
 public abstract class AbstractPrefabPage<D> extends InteractiveCustomUIPage<D> {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final String TAG = "[PrefabsUploader] ";
 
   /** Number of list rows the paginated {@code .ui} pages render per page. */
   protected static final int ROWS = 20;
@@ -51,9 +50,9 @@ public abstract class AbstractPrefabPage<D> extends InteractiveCustomUIPage<D> {
     super(playerRef, lifetime, codec);
   }
 
-  /** Prefixes a message with the plugin's chat tag. */
+  /** Prefixes a message with the plugin's (uncolored) chat tag. */
   protected static Message tagged(Message msg) {
-    return Message.join(Message.raw(TAG), msg);
+    return Message.join(Message.raw("[PrefabsUploader] "), msg);
   }
 
   /**

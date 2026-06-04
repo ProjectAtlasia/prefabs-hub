@@ -23,7 +23,7 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.service.hub.Client;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
 import java.util.logging.Level;
 
 /**
@@ -34,9 +34,6 @@ public final class SetupBroadcaster {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long INTERVAL_MS = 60_000;
-
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
-  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
   private final Client client;
   private final PluginConfig config;
@@ -93,7 +90,7 @@ public final class SetupBroadcaster {
     String url = client.inviteUrl();
     Message base =
         Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
+            Message.raw("[PrefabsUploader] ").color(Messages.TAG),
             Message.translation("server.prefabsuploader.broadcast.setup.prefix"),
             Message.raw(" "));
     if (url == null || url.isEmpty()) {
@@ -105,7 +102,7 @@ public final class SetupBroadcaster {
         Message.translation("server.prefabsuploader.broadcast.setup.installPrompt"),
         Message.raw(" "),
         Message.translation("server.prefabsuploader.broadcast.setup.installButton")
-            .color(DISCORD)
+            .color(Messages.DISCORD)
             .link(url));
   }
 

@@ -30,7 +30,7 @@ import dev.atlasia.prefabuploader.service.messaging.LinkFlow;
 import dev.atlasia.prefabuploader.service.messaging.StatusReply;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
 import dev.atlasia.prefabuploader.service.ratelimit.CommandRateLimiter;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -44,7 +44,6 @@ import javax.annotation.Nullable;
 public class ImportCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
 
   private final Client client;
   private final PluginConfig config;
@@ -73,7 +72,7 @@ public class ImportCommand extends AbstractCommand {
     long wait = CommandRateLimiter.get().remainingCooldownSeconds(uuid);
     if (wait > 0) {
       context.sendMessage(
-          tagged(
+          Messages.tagged(
               Message.translation("server.prefabsuploader.ratelimit.wait")
                   .param("seconds", String.valueOf(wait))));
       return CompletableFuture.completedFuture(null);
@@ -87,21 +86,19 @@ public class ImportCommand extends AbstractCommand {
               case NEEDS_LINK -> linkFlow.start(context, sender, uuid, res);
               case THREAD_OPENED ->
                   context.sendMessage(
-                      tagged(Message.translation("server.prefabsuploader.import.threadOpened")));
+                      Messages.tagged(
+                          Message.translation("server.prefabsuploader.import.threadOpened")));
               case DM_OPENED ->
                   context.sendMessage(
-                      tagged(Message.translation("server.prefabsuploader.import.dmOpened")));
+                      Messages.tagged(
+                          Message.translation("server.prefabsuploader.import.dmOpened")));
               default -> StatusReply.send(context, res, config.inviteUrl());
             }
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport failed: %s", t.getMessage());
             context.sendMessage(
-                tagged(Message.translation("server.prefabsuploader.import.hubError")));
+                Messages.tagged(Message.translation("server.prefabsuploader.import.hubError")));
           }
         });
-  }
-
-  private static Message tagged(Message msg) {
-    return Message.join(Message.raw("[PrefabsUploader] ").color(TAG), msg);
   }
 }
