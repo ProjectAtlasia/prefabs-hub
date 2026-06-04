@@ -59,13 +59,17 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build classes (so Dependency-Check sees resolved deps)
-        run: ./gradlew compileJava --no-daemon
+      - name: Build fat jar (bundles deps so Dependency-Check can scan them)
+        run: ./gradlew shadowJar --no-daemon
       - name: Dependency-Check
         uses: dependency-check/Dependency-Check_Action@main
+        env:
+          # setup-java exports a host JAVA_HOME that doesn't exist inside the action's container;
+          # blank it so the action uses its own bundled JDK.
+          JAVA_HOME: ""
         with:
           project: prefabs-uploader-plugin
-          path: "."
+          path: build/libs
           format: "SARIF"
           # NVD API key is optional; only pass the flag when the secret is set (an empty
           # --nvdApiKey makes the CLI error out). Without a key the NVD update is just slower.
