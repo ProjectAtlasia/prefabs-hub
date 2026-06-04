@@ -1,12 +1,14 @@
 name: release-please
 
-# Conventional-commit driven releases. On every push to master, release-please maintains a
-# "Release PR" that bumps the version (build.gradle.kts) and updates CHANGELOG.md. Merging that
-# Release PR creates the tag + GitHub release; the publish job then builds the jar, attaches it to
-# the release and publishes to CurseForge.
+# Conventional-commit driven releases. Triggered by pushes to master, but release-please operates
+# on the dedicated `release` branch (target-branch), so the version bump + CHANGELOG churn stays
+# isolated from develop/master. It maintains a Release PR against `release`; merging it creates the
+# tag + GitHub release, and the publish job builds the jar (from the tag), attaches it and publishes
+# to CurseForge.
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,10 +24,13 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          # Dedicated release branch that only release-please uses, isolating version/changelog
+          # churn from develop/master.
+          target-branch: release
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # ── Build + publish (runs only when a release was just created by merging the Release PR) ──
+  # ── Build + publish (runs only when a release was just created) ──
   publish:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
@@ -34,7 +39,10 @@ jobs:
     env:
       CURSE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
     steps:
+      # Build from the tag release-please just created (on the release branch, with the bumped version).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -48,7 +56,7 @@ jobs:
       - name: Latest changelog section (for CurseForge)
         run: awk '/^## /{c++} c==1{print} c==2{exit}' CHANGELOG.md > release-notes.md || echo "Release ${{ needs.release-please.outputs.tag_name }}" > release-notes.md
 
-      - name: Build plugin jar (version comes from the bumped build.gradle.kts)
+      - name: Build plugin jar (version comes from the bumped build.gradle.kts on the release branch)
         run: >
           ./gradlew clean shadowJar
           -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true
