@@ -19,19 +19,15 @@
 package dev.atlasia.prefabuploader.command;
 
 import com.hypixel.hytale.server.core.command.system.basecommands.AbstractCommandCollection;
-import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import javax.annotation.Nonnull;
 
-/** Root command {@code /prefabs-uploader}, with aliases {@code prefabsuploader} and {@code pu}. */
-public class PrefabsUploaderCommand extends AbstractCommandCollection {
+/** {@code /prefabs-uploader config pair-message enable|disable} — toggles the pairing broadcast. */
+public class ConfigPairMessageCommand extends AbstractCommandCollection {
 
-  public PrefabsUploaderCommand(@Nonnull HubClient client, @Nonnull PluginConfig config) {
-    super("prefabsuploader", "server.prefabsuploader.command.root.description");
-    addAliases("prefabs-uploader", "pu");
-    addSubCommand(new ConfigCommand(client, config));
-    addSubCommand(new ImportCommand(client));
-    addSubCommand(new ValidateCommand(client));
-    addSubCommand(new LinkCommand(client));
+  public ConfigPairMessageCommand(@Nonnull PluginConfig config) {
+    super("pair-message", "server.prefabsuploader.command.config.pairMessage.description");
+    addSubCommand(new PairMessageToggleCommand("enable", true, config));
+    addSubCommand(new PairMessageToggleCommand("disable", false, config));
   }
 }

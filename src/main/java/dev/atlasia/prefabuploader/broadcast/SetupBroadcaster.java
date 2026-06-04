@@ -22,6 +22,7 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.client.HubClient;
+import dev.atlasia.prefabuploader.config.PluginConfig;
 import java.util.logging.Level;
 
 /**
@@ -37,11 +38,13 @@ public final class SetupBroadcaster {
   private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
 
   private final HubClient client;
+  private final PluginConfig config;
   private Thread thread;
   private volatile boolean running = false;
 
-  public SetupBroadcaster(HubClient client) {
+  public SetupBroadcaster(HubClient client, PluginConfig config) {
     this.client = client;
+    this.config = config;
   }
 
   public void start() {
@@ -57,6 +60,9 @@ public final class SetupBroadcaster {
                   Thread.sleep(INTERVAL_MS);
                   if (!running) {
                     break;
+                  }
+                  if (!config.pairMessage()) {
+                    continue;
                   }
                   if (client.isConfigured()) {
                     continue;

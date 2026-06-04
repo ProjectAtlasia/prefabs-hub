@@ -73,9 +73,9 @@ public class PrefabsUploaderPlugin extends JavaPlugin {
 
     this.config = PluginConfig.load(dataDir());
     this.hubClient = new HubClient(config);
-    this.broadcaster = new SetupBroadcaster(hubClient);
+    this.broadcaster = new SetupBroadcaster(hubClient, config);
 
-    this.getCommandRegistry().registerCommand(new PrefabsUploaderCommand(hubClient));
+    this.getCommandRegistry().registerCommand(new PrefabsUploaderCommand(hubClient, config));
 
     try {
       hubClient.start();

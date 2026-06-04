@@ -38,8 +38,6 @@ public class ImportCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final java.awt.Color TAG = new java.awt.Color(0xFF, 0xAA, 0x00);
-  private static final java.awt.Color CODE = new java.awt.Color(0x66, 0xDD, 0x77);
-  private static final java.awt.Color DISCORD = new java.awt.Color(0x72, 0x89, 0xDA);
 
   private final HubClient client;
 
@@ -65,7 +63,7 @@ public class ImportCommand extends AbstractCommand {
           try {
             PlayerImportResponse res = client.playerImport(uuid, username);
             switch (res.getStatus()) {
-              case NEEDS_LINK -> showNeedsLink(context, res);
+              case NEEDS_LINK -> showNeedsLink(context);
               case THREAD_OPENED ->
                   context.sendMessage(
                       tagged(Message.translation("server.prefabsuploader.import.threadOpened")));
@@ -79,25 +77,8 @@ public class ImportCommand extends AbstractCommand {
         });
   }
 
-  private void showNeedsLink(CommandContext context, PlayerImportResponse res) {
-    context.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
-            Message.translation("server.prefabsuploader.import.needsLink"),
-            Message.raw(" "),
-            Message.translation("server.prefabsuploader.import.needsLink.code")
-                .param("code", res.getLinkCode())
-                .color(CODE)));
-    if (!res.getBotInviteUrl().isEmpty()) {
-      context.sendMessage(
-          Message.join(
-              Message.translation("server.prefabsuploader.import.needsLink.invitePrompt"),
-              Message.raw(" "),
-              Message.translation("server.prefabsuploader.import.needsLink.inviteButton")
-                  .color(DISCORD)
-                  .link(res.getBotInviteUrl())));
-    }
-    context.sendMessage(Message.translation("server.prefabsuploader.import.needsLink.retry"));
+  private void showNeedsLink(CommandContext context) {
+    context.sendMessage(tagged(Message.translation("server.prefabsuploader.import.useLink")));
   }
 
   private static Message tagged(Message msg) {

@@ -22,6 +22,8 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.client.HubClient;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
 import java.util.concurrent.CompletableFuture;
@@ -91,6 +93,7 @@ public class ConfigSetupCommand extends AbstractCommand {
                         .param("code", res.getPairingCode())
                         .color(CODE)));
             context.sendMessage(Message.translation("server.prefabsuploader.config.setup.expires"));
+            openSetupWindow(context);
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] requestSetup falhou: %s", t.getMessage());
             context.sendMessage(
@@ -99,5 +102,37 @@ public class ConfigSetupCommand extends AbstractCommand {
                     Message.translation("server.prefabsuploader.config.setup.hubError")));
           }
         });
+  }
+
+  /** Opens a 3-min window that confirms the pairing in-game when the hub reports configured. */
+  private void openSetupWindow(CommandContext context) {
+    if (!context.isPlayer()) {
+      return;
+    }
+    PlayerRef admin = context.senderAs(PlayerRef.class);
+    HubClient.Window window = client.openWindow(180);
+    Runnable dereg =
+        client.awaitConfigured(
+            () -> {
+              window.close();
+              sendInGame(
+                  admin,
+                  Message.join(
+                      Message.raw("[PrefabsUploader] ").color(TAG),
+                      Message.translation("server.prefabsuploader.config.setup.paired")));
+            });
+    window.onExpire(dereg);
+  }
+
+  private static void sendInGame(PlayerRef ref, Message msg) {
+    try {
+      var world = Universe.get().getWorld(ref.getWorldUuid());
+      if (world != null) {
+        world.execute(() -> ref.sendMessage(msg));
+      }
+    } catch (Throwable t) {
+      LOG.at(Level.FINE).log(
+          "[PrefabsUploader] confirmação in-game de setup falhou: %s", t.getMessage());
+    }
   }
 }

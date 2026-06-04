@@ -60,3 +60,22 @@ prefabsuploader.ui.previewLoading = Carregando preview…
 prefabsuploader.ui.previewDownloadError = Falha ao baixar o prefab do Discord.
 prefabsuploader.ui.validationFailed = Validação falhou: {error}
 prefabsuploader.ui.hubOffline = Não foi possível falar com o hub. Confira se o bot do Discord está online.
+
+# ---- /prefabs-uploader link (vínculo de jogador) ----
+prefabsuploader.command.link.description = Vincula sua conta Hytale ao Discord
+prefabsuploader.link.notplayer = Apenas jogadores podem usar /prefabs-uploader link.
+prefabsuploader.link.needsLink = Vincule sua conta. No Discord, digite:
+prefabsuploader.link.code = /link {code}
+prefabsuploader.link.invitePrompt = Não está no servidor? Entre:
+prefabsuploader.link.inviteButton = [ Discord ]
+prefabsuploader.link.waiting = Aguardando você vincular no Discord (3 min)…
+prefabsuploader.link.linked = Conta vinculada! Discord: {discord}
+prefabsuploader.link.alreadyLinked = Sua conta já está vinculada. Use /prefabs-uploader import.
+prefabsuploader.link.hubError = Falha ao falar com o hub. Confira se o bot do Discord está online.
+prefabsuploader.import.useLink = Sua conta não está vinculada. Rode /prefabs-uploader link primeiro.
+
+# ---- pair-message + confirmação de pareamento ----
+prefabsuploader.command.config.pairMessage.description = Liga/desliga o aviso automático de pareamento
+prefabsuploader.config.pairMessage.on = Aviso de pareamento LIGADO.
+prefabsuploader.config.pairMessage.off = Aviso de pareamento DESLIGADO (os comandos seguem funcionando).
+prefabsuploader.config.setup.paired = Servidor pareado com sucesso!

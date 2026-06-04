@@ -60,3 +60,22 @@ prefabsuploader.ui.previewLoading = Loading preview…
 prefabsuploader.ui.previewDownloadError = Failed to download the prefab from Discord.
 prefabsuploader.ui.validationFailed = Validation failed: {error}
 prefabsuploader.ui.hubOffline = Could not reach the hub. Make sure the Discord bot is online.
+
+# ---- /prefabs-uploader link (player account link) ----
+prefabsuploader.command.link.description = Link your Hytale account to Discord
+prefabsuploader.link.notplayer = Only players can use /prefabs-uploader link.
+prefabsuploader.link.needsLink = Link your account. On Discord, type:
+prefabsuploader.link.code = /link {code}
+prefabsuploader.link.invitePrompt = Not in the server? Join:
+prefabsuploader.link.inviteButton = [ Discord ]
+prefabsuploader.link.waiting = Waiting for you to link on Discord (3 min)…
+prefabsuploader.link.linked = Account linked! Discord: {discord}
+prefabsuploader.link.alreadyLinked = Your account is already linked. Use /prefabs-uploader import.
+prefabsuploader.link.hubError = Could not reach the hub. Make sure the Discord bot is online.
+prefabsuploader.import.useLink = Your account is not linked. Run /prefabs-uploader link first.
+
+# ---- pair-message + pairing confirmation ----
+prefabsuploader.command.config.pairMessage.description = Toggle the automatic pairing broadcast
+prefabsuploader.config.pairMessage.on = Pairing broadcast ENABLED.
+prefabsuploader.config.pairMessage.off = Pairing broadcast DISABLED (commands still work).
+prefabsuploader.config.setup.paired = Server paired successfully!
