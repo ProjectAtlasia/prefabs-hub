@@ -34,140 +34,160 @@ $C.@Container {
       Button #Row0 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState0 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName0  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon0 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName0 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount0 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row1 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState1 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName1  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon1 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName1 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount1 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row2 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState2 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName2  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon2 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName2 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount2 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row3 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState3 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName3  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon3 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName3 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount3 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row4 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState4 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName4  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon4 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName4 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount4 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row5 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState5 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName5  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon5 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName5 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount5 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row6 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState6 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName6  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon6 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName6 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount6 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row7 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState7 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName7  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon7 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName7 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount7 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row8 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState8 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName8  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon8 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName8 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount8 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row9 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState9 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName9  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon9 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName9 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount9 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row10 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState10 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName10  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon10 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName10 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount10 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row11 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState11 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName11  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon11 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName11 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount11 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row12 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState12 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName12  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon12 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName12 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount12 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row13 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState13 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName13  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon13 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName13 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount13 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row14 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState14 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName14  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon14 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName14 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount14 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row15 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState15 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName15  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon15 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName15 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount15 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row16 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState16 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName16  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon16 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName16 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount16 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row17 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState17 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName17  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon17 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName17 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount17 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row18 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState18 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName18  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon18 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName18 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount18 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }
       Button #Row19 { Visible: false; Anchor: (Top: 2, Height: 32); Style: (...$C.@SecondaryButtonStyle);
         Group { LayoutMode: Center; Padding: (Horizontal: 12);
           Label #RowState19 { Anchor: (Width: 40); Style: (FontSize: 15, RenderBold: true); }
-          Label #RowName19  { FlexWeight: 1; Style: (FontSize: 14); }
+          ItemIcon #Icon19 { Anchor: (Width: 24, Height: 24); }
+          Label #RowName19 { FlexWeight: 1; Anchor: (Left: 6); Style: (FontSize: 14); }
           Label #RowCount19 { Anchor: (Width: 110); Style: (FontSize: 13, HorizontalAlignment: End); }
         }
       }

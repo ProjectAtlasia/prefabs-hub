@@ -48,6 +48,7 @@ prefabsuploader.blockreview.back = Voltar à lista
 prefabsuploader.blockreview.saving = Salvando…
 prefabsuploader.blockreview.approvedChat = Aprovado {name} (curado).
 prefabsuploader.blockreview.error = erro: {error}
+prefabsuploader.blockreview.errorGeneric = Falha ao aprovar. Veja o log do servidor.
 prefabsuploader.blockreview.loadError = Falha ao ler os blocos do prefab.
 
 # ---- Broadcast de setup (servidor não pareado) ----
@@ -73,6 +74,7 @@ prefabsuploader.ui.authorDiscord = Discord: {discord}
 prefabsuploader.ui.approved = Aprovado: {name}
 prefabsuploader.ui.removed = Removido: {name}
 prefabsuploader.ui.error = erro: {error}
+prefabsuploader.ui.errorGeneric = Algo deu errado. Veja o log do servidor.
 prefabsuploader.ui.previewLoading = Carregando preview…
 prefabsuploader.ui.previewDownloadError = Falha ao baixar o prefab do Discord.
 prefabsuploader.ui.validationFailed = Validação falhou: {error}

@@ -190,6 +190,9 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
    */
   private void handleSelect(String action) {
     int rowIdx = parseIdx(action, "Select");
+    if (rowIdx < 0 || rowIdx >= ROWS) {
+      return;
+    }
     List<PendingPrefab> view = filtered();
     int absolute = page * ROWS + rowIdx;
     PendingPrefab chosen = null;
@@ -223,12 +226,11 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
               PrefabValidator.Result result;
               try {
                 GetPendingResponse gp = hubClient.getPending(target.id());
-                bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
+                bytes = hubClient.downloadFromCdn(gp.getDownloadUrl(), gp.getSizeBytes());
                 result = PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
               } catch (Throwable t) {
-                LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] preview download/validate failed (%s): %s",
-                    target.prefabName(), t.getMessage());
+                LOG.at(Level.WARNING).withCause(t).log(
+                    "[PrefabsUploader] preview download/validate failed (%s)", target.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen != selectionGen) {
@@ -289,7 +291,7 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
             () -> {
               try {
                 GetPendingResponse gp = hubClient.getPending(pending.id());
-                byte[] bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
+                byte[] bytes = hubClient.downloadFromCdn(gp.getDownloadUrl(), gp.getSizeBytes());
                 PrefabValidator.Result rv =
                     PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
                 if (!rv.ok()) {
@@ -305,15 +307,14 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
                       openReview(pending, parsed);
                     });
               } catch (Throwable t) {
-                final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
                     "[PrefabsUploader] failed to load prefab %s for review", pending.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen == selectionGen) {
-                        showDetailValidationFailed(reason);
+                        showDetailError("server.prefabsuploader.ui.errorGeneric");
                       }
-                      sendError(reason);
+                      sendErrorGeneric();
                     });
               }
             });
@@ -371,10 +372,9 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
                       refresh();
                     });
               } catch (Throwable t) {
-                final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
                     "[PrefabsUploader] failed to reject prefab %s", sel.prefabName());
-                runOnWorld(() -> sendError(reason));
+                runOnWorld(this::sendErrorGeneric);
               }
             });
   }
@@ -541,11 +541,9 @@ public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPag
     playerRef.sendMessage(tagged(Message.translation(i18nKey).param("name", sanitize(prefabName))));
   }
 
-  private void sendError(String reason) {
-    playerRef.sendMessage(
-        tagged(
-            Message.translation("server.prefabsuploader.ui.error")
-                .param("error", sanitize(String.valueOf(reason)))));
+  /** Sends a generic chat error so raw exception text never reaches the client. */
+  private void sendErrorGeneric() {
+    playerRef.sendMessage(tagged(Message.translation("server.prefabsuploader.ui.errorGeneric")));
   }
 
   /**

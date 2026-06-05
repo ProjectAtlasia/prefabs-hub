@@ -190,6 +190,9 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
       return;
     }
     int row = parseIdx(action, "Toggle");
+    if (row < 0 || row >= ROWS) {
+      return;
+    }
     int idx = page * ROWS + row;
     if (idx >= 0 && idx < allowed.length) {
       allowed[idx] = !allowed[idx];
@@ -268,17 +271,15 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
                                     .param("name", sanitize(pending.prefabName())))));
                 reopenValidation();
               } catch (Throwable t) {
-                done = false;
-                final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
                     "[PrefabsUploader] block-review approve failed for %s", pending.prefabName());
                 runOnWorld(
                     () -> {
+                      done = false;
                       UICommandBuilder b = new UICommandBuilder();
                       b.set(
                           "#Summary.TextSpans",
-                          Message.translation("server.prefabsuploader.blockreview.error")
-                              .param("error", sanitize(reason)));
+                          Message.translation("server.prefabsuploader.blockreview.errorGeneric"));
                       b.set("#Confirm.Disabled", false);
                       sendUpdate(b, false);
                     });
@@ -306,8 +307,8 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
                         .map(PendingPrefab::fromProto)
                         .toList();
               } catch (Throwable t) {
-                LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] failed to reload pending list: %s", t.getMessage());
+                LOG.at(Level.WARNING).withCause(t).log(
+                    "[PrefabsUploader] failed to reload pending list");
                 items = List.of();
               }
               final List<PendingPrefab> finalItems = items;
@@ -352,6 +353,7 @@ public class PrefabBlockReviewPage extends AbstractPrefabPage<PrefabBlockReviewP
         PrefabBlockManifest.Entry e = entries.get(idx);
         boolean ok = allowed[idx];
         b.set("#Row" + i + ".Visible", true);
+        b.set("#Icon" + i + ".ItemId", e.name());
         b.set(
             "#RowState" + i + ".TextSpans", Message.raw(ok ? "ON" : "OFF").color(ok ? GREEN : RED));
         Color nameColor = !ok ? GRAY : (e.suspicious() ? ORANGE : WHITE);
