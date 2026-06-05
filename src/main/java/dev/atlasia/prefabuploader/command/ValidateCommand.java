@@ -73,7 +73,8 @@ public class ValidateCommand extends AbstractCommand {
               } catch (Throwable t) {
                 LOG.at(Level.WARNING).log(
                     "[PrefabsUploader] ListPending failed: %s", t.getMessage());
-                sender.sendMessage(
+                sendInGame(
+                    sender,
                     Message.join(
                         Message.raw("[PrefabsUploader] "),
                         Message.translation("server.prefabsuploader.ui.hubOffline")));
@@ -82,6 +83,18 @@ public class ValidateCommand extends AbstractCommand {
               openPage(sender, items);
             });
     return CompletableFuture.completedFuture(null);
+  }
+
+  /** Sends a message to the player on the world thread (no-op if the world is gone). */
+  private static void sendInGame(PlayerRef ref, Message msg) {
+    try {
+      var world = Universe.get().getWorld(ref.getWorldUuid());
+      if (world != null) {
+        world.execute(() -> ref.sendMessage(msg));
+      }
+    } catch (Throwable t) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] in-game message failed: %s", t.getMessage());
+    }
   }
 
   /** Opens the page on the player's world thread with the already-loaded pending list. */

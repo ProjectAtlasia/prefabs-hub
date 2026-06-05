@@ -23,6 +23,7 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
@@ -39,7 +40,9 @@ import javax.annotation.Nullable;
 /**
  * {@code /prefabs-uploader import} — per-player prefab upload flow. Asks the hub: if the account is
  * not linked, runs the link flow; if it is, the hub opens a private Discord thread (or a DM
- * fallback when the bot lacks thread permissions).
+ * fallback when the bot lacks thread permissions). Gated by the permission node {@code
+ * projectatlasia.prefabsuploader.command.import}, so the server owner controls who may run it
+ * (grant that node to the desired group/players).
  */
 public class ImportCommand extends AbstractCommand {
 
@@ -85,20 +88,35 @@ public class ImportCommand extends AbstractCommand {
             switch (res.getStatus()) {
               case NEEDS_LINK -> linkFlow.start(context, sender, uuid, res);
               case THREAD_OPENED ->
-                  context.sendMessage(
+                  sendInGame(
+                      sender,
                       Messages.tagged(
                           Message.translation("server.prefabsuploader.import.threadOpened")));
               case DM_OPENED ->
-                  context.sendMessage(
+                  sendInGame(
+                      sender,
                       Messages.tagged(
                           Message.translation("server.prefabsuploader.import.dmOpened")));
               default -> StatusReply.send(context, res, config.inviteUrl());
             }
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] playerImport failed: %s", t.getMessage());
-            context.sendMessage(
+            sendInGame(
+                sender,
                 Messages.tagged(Message.translation("server.prefabsuploader.import.hubError")));
           }
         });
+  }
+
+  /** Sends a message to the player on the world thread (no-op if the world is gone). */
+  private static void sendInGame(PlayerRef ref, Message msg) {
+    try {
+      var world = Universe.get().getWorld(ref.getWorldUuid());
+      if (world != null) {
+        world.execute(() -> ref.sendMessage(msg));
+      }
+    } catch (Throwable t) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] in-game message failed: %s", t.getMessage());
+    }
   }
 }

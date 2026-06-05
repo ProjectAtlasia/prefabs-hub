@@ -51,8 +51,8 @@ public class ConfigSetupCommand extends AbstractCommand {
   @Nullable
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext context) {
-    String requestedBy =
-        context.isPlayer() ? context.senderAs(PlayerRef.class).getUsername() : "console";
+    PlayerRef admin = context.isPlayer() ? context.senderAs(PlayerRef.class) : null;
+    String requestedBy = admin != null ? admin.getUsername() : "console";
     context.sendMessage(
         Messages.tagged(Message.translation("server.prefabsuploader.config.setup.generating")));
 
@@ -60,7 +60,9 @@ public class ConfigSetupCommand extends AbstractCommand {
         () -> {
           try {
             SetupResponse res = client.requestSetup(requestedBy);
-            context.sendMessage(
+            sendReply(
+                context,
+                admin,
                 Message.join(
                     Message.raw("[PrefabsUploader] ").color(Messages.TAG),
                     Message.translation("server.prefabsuploader.config.setup.pairingCode"),
@@ -69,7 +71,9 @@ public class ConfigSetupCommand extends AbstractCommand {
                         .param("code", res.getPairingCode())
                         .color(Messages.CODE)));
             if (!res.getBotInviteUrl().isEmpty()) {
-              context.sendMessage(
+              sendReply(
+                  context,
+                  admin,
                   Message.join(
                       Message.translation("server.prefabsuploader.config.setup.step1"),
                       Message.raw(" "),
@@ -77,22 +81,39 @@ public class ConfigSetupCommand extends AbstractCommand {
                           .color(Messages.DISCORD)
                           .link(res.getBotInviteUrl())));
             }
-            context.sendMessage(
+            sendReply(
+                context,
+                admin,
                 Message.join(
                     Message.translation("server.prefabsuploader.config.setup.step2"),
                     Message.raw(" "),
                     Message.translation("server.prefabsuploader.config.setup.step2.command")
                         .param("code", res.getPairingCode())
                         .color(Messages.CODE)));
-            context.sendMessage(Message.translation("server.prefabsuploader.config.setup.expires"));
+            sendReply(
+                context, admin, Message.translation("server.prefabsuploader.config.setup.expires"));
             openSetupWindow(context);
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] requestSetup failed: %s", t.getMessage());
-            context.sendMessage(
+            sendReply(
+                context,
+                admin,
                 Messages.tagged(
                     Message.translation("server.prefabsuploader.config.setup.hubError")));
           }
         });
+  }
+
+  /**
+   * Replies to the command sender from a background thread: marshals to the world thread for
+   * players and falls back to a direct console reply otherwise.
+   */
+  private static void sendReply(CommandContext context, @Nullable PlayerRef admin, Message msg) {
+    if (admin != null) {
+      sendInGame(admin, msg);
+    } else {
+      context.sendMessage(msg);
+    }
   }
 
   /** Opens a 3-min window that confirms the pairing in-game when the hub reports configured. */
