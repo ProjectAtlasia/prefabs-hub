@@ -27,8 +27,10 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -45,12 +47,14 @@ public final class PlayerNameCache {
   }
 
   private final Path file = Paths.get("prefabsuploader", "player-names.properties");
-  private final Properties props = new Properties();
+  private final Map<String, String> cache = new ConcurrentHashMap<>();
 
   private PlayerNameCache() {
     if (Files.exists(file)) {
       try (InputStream in = Files.newInputStream(file)) {
+        Properties props = new Properties();
         props.load(in);
+        props.forEach((k, v) -> cache.put(String.valueOf(k), String.valueOf(v)));
       } catch (IOException e) {
         LOG.at(Level.WARNING).log(
             "[PrefabsUploader] failed to read name cache: %s", e.getMessage());
@@ -68,17 +72,18 @@ public final class PlayerNameCache {
     if (uuid == null || uuid.isBlank() || username == null || username.isBlank()) {
       return;
     }
-    if (username.equals(props.getProperty(uuid))) {
+    String previous = cache.put(uuid, username);
+    if (username.equals(previous)) {
       return;
     }
-    props.setProperty(uuid, username);
     save();
   }
 
   /**
    * Resolves the in-game username for a UUID, trying the cache first and then online players via
-   * {@link Universe}, caching the result when found online. Must run on the world thread because it
-   * looks up the {@link Universe}.
+   * {@link Universe}, caching the result when found online. The in-memory cache is thread-safe; the
+   * {@link Universe} lookup is only reached for an uncached UUID and should be done on the world
+   * thread.
    *
    * @param uuid the player's UUID
    * @return the resolved username, or {@code null} if it cannot be determined
@@ -87,7 +92,7 @@ public final class PlayerNameCache {
     if (uuid == null || uuid.isBlank()) {
       return null;
     }
-    String cached = props.getProperty(uuid);
+    String cached = cache.get(uuid);
     if (cached != null) {
       return cached;
     }
@@ -108,6 +113,8 @@ public final class PlayerNameCache {
 
   private synchronized void save() {
     try {
+      Properties props = new Properties();
+      props.putAll(cache);
       Files.createDirectories(file.getParent());
       Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
       try (OutputStream out = Files.newOutputStream(tmp)) {
