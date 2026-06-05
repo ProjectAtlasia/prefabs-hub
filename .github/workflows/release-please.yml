@@ -54,9 +54,19 @@ jobs:
       - name: Latest changelog section (for CurseForge)
         run: awk '/^## /{c++} c==1{print} c==2{exit}' CHANGELOG.md > release-notes.md || echo "Release ${{ needs.release-please.outputs.tag_name }}" > release-notes.md
 
+      # ScaffoldIt fills the manifest's Main from the compiled plugin class, resolved at configuration
+      # time. A single `clean shadowJar` runs generateManifest before compileJava and falls back to a
+      # wrong derived stub (this broke the 0.2.1 jar). Compiling in a separate prior invocation makes
+      # the class available when shadowJar configures, so the manifest gets the correct Main.
+      - name: Compile first (so ScaffoldIt resolves the manifest Main from the compiled class)
+        run: >
+          ./gradlew clean compileJava
+          -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true -PhubAllowInsecure=false
+          -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
+
       - name: Build plugin jar (version comes from the bumped build.gradle.kts on master)
         run: >
-          ./gradlew clean shadowJar
+          ./gradlew shadowJar
           -PhubDefault="${{ secrets.HUB_DEFAULT }}" -PhubTlsDefault=true -PhubAllowInsecure=false
           -PbuildTime=${{ steps.meta.outputs.time }} --no-daemon
 
