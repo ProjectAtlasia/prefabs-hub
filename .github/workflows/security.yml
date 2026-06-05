@@ -1,12 +1,13 @@
 name: validate
 
 # Validation workflow (PR/build gate). Builds the jar and runs the security scanners on PRs into
-# master and on develop pushes (early feedback). When these checks pass (enforce via branch
-# protection on master), the PR can be merged; the push to master then triggers release-please.yml,
-# whose publish step is gated by manual approval. This workflow does not publish anything.
+# develop (feature PRs) and master (the develop->master release PR), plus develop pushes. When these
+# checks pass (enforce via branch protection on master), the PR can be merged; the push to master
+# then triggers release.yml (semantic-release), whose publish is gated by manual approval. This
+# workflow does not publish anything.
 on:
   pull_request:
-    branches: [master]
+    branches: [develop, master]
   push:
     branches: [develop]
   workflow_dispatch:
