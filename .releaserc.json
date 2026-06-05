@@ -1,0 +1,23 @@
+{
+  "branches": ["master"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "./gradlew clean compileJava -PreleaseVersion=${nextRelease.version} -PhubDefault=\"$HUB_DEFAULT\" -PhubTlsDefault=true -PhubAllowInsecure=false -PbuildTime=\"$BUILD_TIME\" --no-daemon && ./gradlew shadowJar -PreleaseVersion=${nextRelease.version} -PhubDefault=\"$HUB_DEFAULT\" -PhubTlsDefault=true -PhubAllowInsecure=false -PbuildTime=\"$BUILD_TIME\" --no-daemon",
+        "publishCmd": "./gradlew publishCurseforge -PcfPublish -PreleaseVersion=${nextRelease.version} -PcfChangelog=\"Release ${nextRelease.version} - see https://github.com/ProjectAtlasia/prefabs-hub/releases/tag/${nextRelease.gitTag}\" -PhubDefault=\"$HUB_DEFAULT\" -PhubTlsDefault=true -PhubAllowInsecure=false -PbuildTime=\"$BUILD_TIME\" --no-daemon"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [{ "path": "build/libs/prefabs-hub-*.jar", "label": "PrefabsUploader plugin jar" }],
+        "successComment": false,
+        "failComment": false
+      }
+    ]
+  ]
+}

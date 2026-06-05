@@ -1,0 +1,44 @@
+name: release
+
+# semantic-release driven releases. Triggered by pushes to master (i.e. when develop is merged in):
+# it computes the next version from the conventional commits, creates the tag + GitHub release,
+# builds the jar and publishes to CurseForge. Nothing is committed back — the version comes from the
+# tag at build time (-PreleaseVersion) — so develop never drifts and there is no back-merge. The
+# whole release waits for manual approval via the `publish` environment before anything is tagged.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create tags and GitHub releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: publish # manual approval before anything is tagged/published
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # semantic-release needs the full history and all tags
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build metadata (shared timestamp for the jar name)
+        run: echo "BUILD_TIME=$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_ENV"
+
+      - name: Install release tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURSE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          HUB_DEFAULT: ${{ secrets.HUB_DEFAULT }}
+        run: npx semantic-release

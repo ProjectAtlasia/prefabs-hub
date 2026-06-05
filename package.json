@@ -1,0 +1,10 @@
+{
+  "name": "prefabs-hub-release",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Release tooling for the PrefabsUploader plugin (semantic-release). Not a published package.",
+  "devDependencies": {
+    "@semantic-release/exec": "^6.0.3",
+    "semantic-release": "^24.2.0"
+  }
+}

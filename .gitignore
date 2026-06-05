@@ -44,3 +44,6 @@ docs/HYTALE-PREFAB-API.md
 docs/HYTALE-PREFAB-PIPELINE.md
 # Diretrizes internas de dev — não fazem parte do artefato open-source
 CLAUDE.md
+
+# Node (semantic-release)
+node_modules/
