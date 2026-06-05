@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1](https://github.com/ProjectAtlasia/prefabs-hub/compare/v0.2.0...v0.2.1) (2026-06-05)
+
+
+### Features
+
+* discord upload pipeline, in-game status, permissions and security scanning ([eb41e45](https://github.com/ProjectAtlasia/prefabs-hub/commit/eb41e45313c5b8a4de8a1f1299e00f4f9dc3ef8a))
+* initial open-source release under GPLv3 ([3ceb1ba](https://github.com/ProjectAtlasia/prefabs-hub/commit/3ceb1ba015ab0054ef1b4ed9d3ad3f649eb8f17b))
+
+
+### Bug Fixes
+
+* security, concurrency and review-UI hardening ([aece50d](https://github.com/ProjectAtlasia/prefabs-hub/commit/aece50d6a98487b7a466a1489b9d6e16776db38c))
+
 ## [0.2.0](https://github.com/ProjectAtlasia/prefabs-hub/compare/v0.1.0...v0.2.0) (2026-06-04)
 
 
