@@ -112,12 +112,17 @@ public final class PluginConfig {
     Path source = newExists ? file : (migrate ? legacy : null);
 
     boolean documented = false;
+    boolean loadFailed = false;
     if (source != null) {
       Properties props = new Properties();
       try (InputStream in = Files.newInputStream(source)) {
         props.load(in);
       } catch (IOException e) {
-        LOG.at(Level.WARNING).log("[PrefabsUploader] failed to read config: %s", e.getMessage());
+        loadFailed = true;
+        LOG.at(Level.SEVERE).withCause(e).log(
+            "[PrefabsUploader] failed to read existing config %s; keeping identity intact and"
+                + " skipping rewrite this run",
+            source);
       }
       serverId = props.getProperty("server.id", "");
       hubAddress = props.getProperty("hub.address", DEFAULT_HUB);
@@ -143,6 +148,10 @@ public final class PluginConfig {
       authToken = "";
       pairMessage = true;
       inviteUrl = "";
+    }
+
+    if (loadFailed) {
+      return;
     }
 
     boolean fresh = serverId == null || serverId.isEmpty();
