@@ -169,7 +169,13 @@ publisher {
             ?: "Automated release — see https://github.com/ProjectAtlasia/prefabs-hub/releases",
     )
     setGameVersions("0.5")
-    artifact.set("build/libs/prefabs-hub-${project.version}-$buildTime.jar")
+    // Single source of truth: bind to the shadowJar's real output instead of re-deriving the name
+    // (which silently drifts if $buildTime differs between the build and this publish call).
+    artifact.set(
+        tasks
+            .named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar")
+            .flatMap { it.archiveFile },
+    )
 }
 
 tasks.named("publishCurseforge") { dependsOn("shadowJar") }
