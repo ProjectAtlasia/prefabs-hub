@@ -14,6 +14,7 @@ prefabsuploader.import.notplayer = Apenas jogadores podem usar /prefabs-uploader
 prefabsuploader.import.threadOpened = Abrimos uma thread privada no Discord pra você. Mande seu .prefab.json lá.
 prefabsuploader.import.dmOpened = Não consegui abrir uma thread (o dono do servidor precisa ajustar as permissões do bot). Te chamei na DM — mande seu .prefab.json por lá.
 prefabsuploader.import.hubError = Falha ao falar com o hub. Confira se o bot do Discord está online.
+prefabsuploader.ratelimit.wait = Aguarde {seconds}s antes de tentar de novo.
 
 # ---- status do import/link (configuração/contato) ----
 prefabsuploader.status.notConfigured = Este servidor ainda não foi configurado no Discord. Avise um admin.
@@ -37,6 +38,19 @@ prefabsuploader.config.setup.hubError = Falha ao falar com o hub. Confira se o b
 # ---- /prefabs-uploader validate ----
 prefabsuploader.validate.notplayer = Apenas jogadores podem abrir a UI de validação.
 
+# ---- /prefabs-uploader validate: revisão de blocos ----
+prefabsuploader.blockreview.title = Revisar Blocos
+prefabsuploader.blockreview.hint = Clique num bloco pra permitir ou bloquear. Só os permitidos são salvos; os suspeitos ficam destacados.
+prefabsuploader.blockreview.pageInfo = Tipos de bloco: {count}  |  Página {page}/{pages}
+prefabsuploader.blockreview.summary = {allowed} permitidos, {blocked} bloqueados
+prefabsuploader.blockreview.confirm = Confirmar e Aprovar
+prefabsuploader.blockreview.back = Voltar à lista
+prefabsuploader.blockreview.saving = Salvando…
+prefabsuploader.blockreview.approvedChat = Aprovado {name} (curado).
+prefabsuploader.blockreview.error = erro: {error}
+prefabsuploader.blockreview.errorGeneric = Falha ao aprovar. Veja o log do servidor.
+prefabsuploader.blockreview.loadError = Falha ao ler os blocos do prefab.
+
 # ---- Broadcast de setup (servidor não pareado) ----
 prefabsuploader.broadcast.setup.prefix = Configure a conexão com o Discord para este plugin funcionar.
 prefabsuploader.broadcast.setup.noHub = Use /prefabs-uploader config setup quando o hub estiver disponível.
@@ -47,7 +61,7 @@ prefabsuploader.broadcast.setup.installButton = [ Adicionar bot no Discord ]
 prefabsuploader.ui.title = Validação de Prefabs
 prefabsuploader.ui.searchPlaceholder = Buscar por autor ou nome...
 prefabsuploader.ui.previewTitle = Preview
-prefabsuploader.ui.accept = Aprovar
+prefabsuploader.ui.accept = Revisar e Aprovar
 prefabsuploader.ui.delete = Deletar
 prefabsuploader.ui.prev = < Prev
 prefabsuploader.ui.next = Next >
@@ -60,6 +74,7 @@ prefabsuploader.ui.authorDiscord = Discord: {discord}
 prefabsuploader.ui.approved = Aprovado: {name}
 prefabsuploader.ui.removed = Removido: {name}
 prefabsuploader.ui.error = erro: {error}
+prefabsuploader.ui.errorGeneric = Algo deu errado. Veja o log do servidor.
 prefabsuploader.ui.previewLoading = Carregando preview…
 prefabsuploader.ui.previewDownloadError = Falha ao baixar o prefab do Discord.
 prefabsuploader.ui.validationFailed = Validação falhou: {error}

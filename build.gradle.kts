@@ -15,7 +15,7 @@ plugins {
 val grpcVersion = "1.71.0"
 val protobufVersion = "4.29.3"
 
-version = "0.1.0" // x-release-please-version
+version = "0.2.0" // x-release-please-version
 
 // Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
 val buildTime =
@@ -82,17 +82,25 @@ sourceSets {
 // -PhubDefault=host:port -PhubTlsDefault=true; the committed source stays generic (localhost).
 val hubDefault = (findProperty("hubDefault") as String?) ?: "localhost:50051"
 val hubTlsDefault = (findProperty("hubTlsDefault") as String?)?.toBoolean() ?: false
+// Build-time gate for disabling TLS certificate validation (hub.insecure). Dev builds default to
+// allowing it for local testing; official/release builds pass -PhubAllowInsecure=false so the
+// shipped jar always validates the hub certificate, regardless of config.properties.
+val hubAllowInsecure = (findProperty("hubAllowInsecure") as String?)?.toBoolean() ?: true
 // Gera um RECURSO (não uma classe) lido pelo PluginConfig em runtime. Assim o .java compila sozinho
 // na IDE (sem depender de código gerado) e o build oficial ainda injeta o hub de produção.
 val generatedResDir = layout.buildDirectory.dir("generated/resources/builddefaults")
 val generateBuildResource by tasks.registering {
     inputs.property("hubDefault", hubDefault)
     inputs.property("hubTlsDefault", hubTlsDefault)
+    inputs.property("hubAllowInsecure", hubAllowInsecure)
+    inputs.property("version", version.toString())
     outputs.dir(generatedResDir)
     doLast {
         val f = generatedResDir.get().file("prefabsuploader-build.properties").asFile
         f.parentFile.mkdirs()
-        f.writeText("hub.default=$hubDefault\nhub.tls=$hubTlsDefault\n")
+        f.writeText(
+            "hub.default=$hubDefault\nhub.tls=$hubTlsDefault\n"
+                + "hub.insecure.allowed=$hubAllowInsecure\nversion=$version\n")
     }
 }
 sourceSets.named("main") { resources.srcDir(generateBuildResource) }
@@ -161,7 +169,13 @@ publisher {
             ?: "Automated release — see https://github.com/ProjectAtlasia/prefabs-hub/releases",
     )
     setGameVersions("0.5")
-    artifact.set("build/libs/prefabs-hub-${project.version}-$buildTime.jar")
+    // Single source of truth: bind to the shadowJar's real output instead of re-deriving the name
+    // (which silently drifts if $buildTime differs between the build and this publish call).
+    artifact.set(
+        tasks
+            .named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar")
+            .flatMap { it.archiveFile },
+    )
 }
 
 tasks.named("publishCurseforge") { dependsOn("shadowJar") }

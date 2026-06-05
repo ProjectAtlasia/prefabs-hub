@@ -18,10 +18,14 @@
  */
 package dev.atlasia.prefabuploader.service.messaging;
 
+import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
+import java.util.logging.Level;
 
 /**
  * Renders the in-game message for the {@link PlayerImportResponse} statuses that are not handled by
@@ -30,29 +34,33 @@ import java.awt.Color;
  */
 public final class StatusReply {
 
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
-  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
+  private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
 
   private StatusReply() {}
 
   /**
    * Sends the message for a configuration/contact status; falls back to the hub's raw text. The
    * {@code inviteFallback} (plugin config invite) is used for {@code NOT_IN_GUILD} when the hub did
-   * not provide a guild invite.
+   * not provide a guild invite. Always called from a background thread, so player sends are
+   * marshaled to the world thread.
    */
   public static void send(CommandContext context, PlayerImportResponse res, String inviteFallback) {
     switch (res.getStatus()) {
       case NOT_CONFIGURED ->
-          context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.notConfigured")));
+          reply(
+              context,
+              Messages.tagged(Message.translation("server.prefabsuploader.status.notConfigured")));
       case NO_UPLOADS_CHANNEL ->
-          context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.noUploadsChannel")));
+          reply(
+              context,
+              Messages.tagged(
+                  Message.translation("server.prefabsuploader.status.noUploadsChannel")));
       case NOT_IN_GUILD -> sendNotInGuild(context, res, inviteFallback);
       case CONTACT_FAILED ->
-          context.sendMessage(
-              tagged(Message.translation("server.prefabsuploader.status.contactFailed")));
-      default -> context.sendMessage(tagged(Message.raw(res.getMessage())));
+          reply(
+              context,
+              Messages.tagged(Message.translation("server.prefabsuploader.status.contactFailed")));
+      default -> reply(context, Messages.tagged(Message.raw(res.getMessage())));
     }
   }
 
@@ -61,21 +69,41 @@ public final class StatusReply {
     String hub = res.getGuildInviteUrl();
     String invite = (hub == null || hub.isEmpty()) ? inviteFallback : hub;
     if (invite == null || invite.isEmpty()) {
-      context.sendMessage(
-          tagged(Message.translation("server.prefabsuploader.status.inviteNotConfigured")));
+      reply(
+          context,
+          Messages.tagged(
+              Message.translation("server.prefabsuploader.status.inviteNotConfigured")));
       return;
     }
-    context.sendMessage(tagged(Message.translation("server.prefabsuploader.status.notInGuild")));
-    context.sendMessage(
+    reply(
+        context, Messages.tagged(Message.translation("server.prefabsuploader.status.notInGuild")));
+    reply(
+        context,
         Message.join(
             Message.translation("server.prefabsuploader.status.joinPrompt"),
             Message.raw(" "),
             Message.translation("server.prefabsuploader.link.inviteButton")
-                .color(DISCORD)
+                .color(Messages.DISCORD)
                 .link(invite)));
   }
 
-  private static Message tagged(Message msg) {
-    return Message.join(Message.raw("[PrefabsUploader] ").color(TAG), msg);
+  /**
+   * Replies to the command sender from a background thread: marshals to the world thread for
+   * players and falls back to a direct console reply otherwise.
+   */
+  private static void reply(CommandContext context, Message msg) {
+    if (!context.isPlayer()) {
+      context.sendMessage(msg);
+      return;
+    }
+    PlayerRef ref = context.senderAs(PlayerRef.class);
+    try {
+      var world = Universe.get().getWorld(ref.getWorldUuid());
+      if (world != null) {
+        world.execute(() -> ref.sendMessage(msg));
+      }
+    } catch (Throwable t) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] status reply failed: %s", t.getMessage());
+    }
   }
 }

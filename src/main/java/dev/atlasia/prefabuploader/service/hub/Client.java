@@ -38,7 +38,6 @@ import dev.atlasia.prefabuploader.grpc.ResolvePendingRequest;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.grpc.SetupRequest;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
-import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -65,6 +64,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -85,11 +85,16 @@ public final class Client {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long MAX_MSG = 16L << 20;
 
+  /** Upper bound on a hub-supplied pairing token persisted to config (sanity guard). */
+  private static final int MAX_HUB_TOKEN_LEN = 4096;
+
   /** Per-call deadline applied to every blocking unary RPC. */
   private static final long RPC_DEADLINE_SEC = 10;
 
   private static final Duration CDN_TIMEOUT = Duration.ofSeconds(15);
-  private static final int CDN_MAX_BYTES = PrefabValidator.MAX_BYTES;
+
+  /** Overall wall-clock deadline for streaming a CDN body, guarding against slow-trickle reads. */
+  private static final Duration CDN_READ_DEADLINE = Duration.ofSeconds(30);
 
   /** When no RPC is in flight, gRPC tears down the transport after this many seconds. */
   private static final long IDLE_TIMEOUT_SEC = 30;
@@ -165,6 +170,16 @@ public final class Client {
     return ioExecutor;
   }
 
+  /** The owner-configured maximum prefab upload size in bytes. */
+  public int maxPrefabBytes() {
+    return config.maxPrefabBytes();
+  }
+
+  /** The owner-configured maximum number of approved prefabs per player. */
+  public int maxPrefabsPerPlayer() {
+    return config.maxPrefabsPerPlayer();
+  }
+
   public void start() {
     if (running) {
       return;
@@ -192,8 +207,10 @@ public final class Client {
 
   /**
    * Applies the configured transport security to the channel builder: plaintext when TLS is off,
-   * standard TLS, or insecure TLS (no certificate validation — dev only). The channel closes when
-   * idle and gRPC reopens it transparently on the next RPC.
+   * standard validated TLS, or — only in dev builds that permit it ({@link
+   * PluginConfig#insecureTlsAllowed()}) — insecure TLS with no certificate validation. Official and
+   * release builds always validate the certificate even if {@code hub.insecure=true} is set. The
+   * channel closes when idle and gRPC reopens it transparently on the next RPC.
    */
   private void configureTransportSecurity(NettyChannelBuilder builder, String host)
       throws javax.net.ssl.SSLException {
@@ -201,14 +218,20 @@ public final class Client {
       builder.usePlaintext();
       return;
     }
-    if (!config.hubInsecure()) {
-      builder.useTransportSecurity().overrideAuthority(host);
+    if (config.hubInsecure() && config.insecureTlsAllowed()) {
+      var ssl =
+          GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+      builder.sslContext(ssl).overrideAuthority(host);
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] INSECURE TLS (no certificate validation) enabled -- dev build");
       return;
     }
-    var ssl =
-        GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
-    builder.sslContext(ssl).overrideAuthority(host);
-    LOG.at(Level.WARNING).log("[PrefabsUploader] INSECURE TLS (no certificate validation) enabled");
+    if (config.hubInsecure()) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] hub.insecure=true ignored: this build enforces TLS certificate"
+              + " validation. Use a dev build to disable it.");
+    }
+    builder.useTransportSecurity().overrideAuthority(host);
   }
 
   /**
@@ -498,6 +521,19 @@ public final class Client {
   }
 
   /**
+   * Runs a hub-callback continuation on the I/O executor so a slow or blocking waiter never stalls
+   * the single gRPC read loop that serves every stream subscriber. Skipped silently during
+   * shutdown.
+   */
+  private void dispatchToIo(Runnable r) {
+    try {
+      ioExecutor.execute(r);
+    } catch (RejectedExecutionException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] hub callback dispatch skipped (shutting down)");
+    }
+  }
+
+  /**
    * Registers a one-shot setup waiter, fired when a {@link ConfigState} with {@code
    * configured=true} arrives on the stream. The caller is responsible for opening the window. The
    * waiter removes itself on fire.
@@ -632,7 +668,8 @@ public final class Client {
   /**
    * Downloads the {@code .prefab.json} directly from the Discord CDN (HTTP GET on the URL returned
    * by {@link #getPending}). Blocking — run off the world thread (use {@link #io()}). Reads in a
-   * streaming fashion and aborts if the body exceeds {@link #CDN_MAX_BYTES}.
+   * streaming fashion and aborts if the body exceeds the owner-configured max prefab size. The
+   * declared size is treated as unknown, so no hub/actual cross-check is performed.
    *
    * @param url the HTTPS download URL
    * @return the downloaded bytes
@@ -641,6 +678,38 @@ public final class Client {
    * @throws InterruptedException if the operation is interrupted
    */
   public byte[] downloadFromCdn(String url) throws IOException, InterruptedException {
+    return downloadFromCdn(url, 0L);
+  }
+
+  /**
+   * Downloads the {@code .prefab.json} directly from the Discord CDN, cross-checking against the
+   * hub-declared size ({@link GetPendingResponse#getSizeBytes()}). Blocking — run off the world
+   * thread (use {@link #io()}). Reads in a streaming fashion and aborts if the body exceeds the
+   * owner-configured max prefab size.
+   *
+   * <p>When {@code declaredSize} is positive it is used to: (1) reject before downloading if it
+   * already exceeds the configured cap, avoiding a body the cap would reject anyway; and (2) emit a
+   * warning after download if the actual byte count differs from it. A {@code declaredSize} of
+   * {@code 0} (or negative) is treated as unknown and skips both cross-checks. The hard cap in
+   * {@link #readCapped} always applies regardless of the declared size.
+   *
+   * @param url the HTTPS download URL
+   * @param declaredSize the hub-declared body size in bytes, or {@code 0} when unknown
+   * @return the downloaded bytes
+   * @throws IOException if the URL is invalid/insecure, the declared size exceeds the cap, the
+   *     status is non-2xx, the body exceeds the cap, or a network failure occurs
+   * @throws InterruptedException if the operation is interrupted
+   */
+  public byte[] downloadFromCdn(String url, long declaredSize)
+      throws IOException, InterruptedException {
+    int cap = config.maxPrefabBytes();
+    if (declaredSize > 0 && declaredSize > cap) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] skipping download: hub-declared size %d bytes exceeds the cap of %d"
+              + " bytes",
+          declaredSize, cap);
+      throw new IOException("prefab exceeds the size limit (" + (cap >> 20) + " MiB)");
+    }
     URI uri = requireHttpsUri(url);
     HttpResponse<InputStream> resp =
         httpClient()
@@ -652,9 +721,16 @@ public final class Client {
       closeQuietly(resp.body());
       throw new IOException("download failed (HTTP " + status + ")");
     }
+    byte[] body;
     try (InputStream in = resp.body()) {
-      return readCapped(in);
+      body = readCapped(in, cap);
     }
+    if (declaredSize > 0 && body.length != declaredSize) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] downloaded size mismatch: hub declared %d bytes, actual %d bytes",
+          declaredSize, body.length);
+    }
+    return body;
   }
 
   /**
@@ -681,21 +757,25 @@ public final class Client {
   }
 
   /**
-   * Reads the stream fully into memory, aborting once the body exceeds {@link #CDN_MAX_BYTES}.
+   * Reads the stream fully into memory, aborting once the body exceeds {@code maxBytes} or the read
+   * exceeds {@link #CDN_READ_DEADLINE} (slow-trickle guard).
    *
-   * @throws IOException if the body exceeds the size cap or a read fails
+   * @param maxBytes the maximum accepted body size in bytes
+   * @throws IOException if the body exceeds the size cap, the read times out, or a read fails
    */
-  private static byte[] readCapped(InputStream in) throws IOException {
-    try (ByteArrayOutputStream out =
-        new ByteArrayOutputStream(Math.min(CDN_MAX_BYTES, 64 * 1024))) {
+  private static byte[] readCapped(InputStream in, int maxBytes) throws IOException {
+    long deadline = System.nanoTime() + CDN_READ_DEADLINE.toNanos();
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 64 * 1024))) {
       byte[] buf = new byte[16 * 1024];
       int total = 0;
       int n;
       while ((n = in.read(buf)) != -1) {
+        if (System.nanoTime() > deadline) {
+          throw new IOException("download timed out (slow response)");
+        }
         total += n;
-        if (total > CDN_MAX_BYTES) {
-          throw new IOException(
-              "prefab exceeds the size limit (" + (CDN_MAX_BYTES >> 20) + " MiB)");
+        if (total > maxBytes) {
+          throw new IOException("prefab exceeds the size limit (" + (maxBytes >> 20) + " MiB)");
         }
         out.write(buf, 0, n);
       }
@@ -793,21 +873,59 @@ public final class Client {
   private void onConfigState(ConfigState cs) {
     String url = cs.getBotInviteUrl().isEmpty() ? state.get().inviteUrl() : cs.getBotInviteUrl();
     state.set(new HubState(cs.getConfigured(), url));
-    if (!cs.getAuthToken().isEmpty()) {
-      config.setAuthToken(cs.getAuthToken());
-    }
+    maybePersistAuthToken(cs.getAuthToken());
     LOG.at(Level.INFO).log(
         "[PrefabsUploader] config updated: configured=%s guild=%s",
         cs.getConfigured(), cs.getGuildId());
     // Boot/state waiters fire on every ConfigState; configured waiters only when configured=true.
-    for (Runnable w : new ArrayList<>(stateWaiters)) {
-      runSafe(w);
+    List<Runnable> stateSnapshot = new ArrayList<>(stateWaiters);
+    List<Runnable> configuredSnapshot =
+        cs.getConfigured() ? new ArrayList<>(configuredWaiters) : List.of();
+    dispatchToIo(
+        () -> {
+          for (Runnable w : stateSnapshot) {
+            runSafe(w);
+          }
+          for (Runnable w : configuredSnapshot) {
+            runSafe(w);
+          }
+        });
+  }
+
+  /**
+   * Persists a pairing token supplied by the hub, but only when the connection is authenticated
+   * (the server holds a Hytale identity token) and the token passes a basic format check. The write
+   * runs on the I/O executor so it never blocks the gRPC callback thread. A token offered while
+   * unauthenticated (e.g. the boot fallback that proceeds without identity) is ignored.
+   */
+  private void maybePersistAuthToken(String token) {
+    if (token.isEmpty()) {
+      return;
     }
-    if (cs.getConfigured()) {
-      for (Runnable w : new ArrayList<>(configuredWaiters)) {
-        runSafe(w);
-      }
+    if (!serverHasIdentityToken()) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] ignoring hub-supplied auth token: server is not authenticated with"
+              + " Hytale yet");
+      return;
     }
+    if (!isPlausibleHubToken(token)) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] ignoring hub-supplied auth token: failed format check");
+      return;
+    }
+    try {
+      ioExecutor.execute(() -> config.setAuthToken(token));
+    } catch (RejectedExecutionException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] auth token persist skipped (shutting down)");
+    }
+  }
+
+  /** Sanity check on a hub-supplied token: bounded length, no control or whitespace characters. */
+  private static boolean isPlausibleHubToken(String token) {
+    if (token.length() > MAX_HUB_TOKEN_LEN) {
+      return false;
+    }
+    return token.chars().noneMatch(c -> Character.isISOControl(c) || Character.isWhitespace(c));
   }
 
   private void onPlayerLinked(PlayerLinked pl) {
@@ -815,8 +933,11 @@ public final class Client {
         "[PrefabsUploader] player linked: uuid=%s discord=%s",
         pl.getPlayerUuid(), pl.getDiscordName());
     List<Consumer<PlayerLinked>> snapshot = new ArrayList<>(linkWaiters);
-    for (Consumer<PlayerLinked> w : snapshot) {
-      w.accept(pl);
-    }
+    dispatchToIo(
+        () -> {
+          for (Consumer<PlayerLinked> w : snapshot) {
+            runSafe(() -> w.accept(pl));
+          }
+        });
   }
 }

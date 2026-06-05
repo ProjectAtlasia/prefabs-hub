@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 /**
  * Approves server prefabs: validates the bytes with the engine's native validator (via a temp file,
@@ -43,6 +44,7 @@ public final class PendingPrefabStore {
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final String SUFFIX = ".prefab.json";
   private static final int MAX_NAME_LEN = 48;
+  private static final int MAX_COLLISION_SUFFIX = 1000;
   private static final PendingPrefabStore INSTANCE = new PendingPrefabStore();
 
   private static final Set<ValidationOption> VALIDATION =
@@ -69,9 +71,12 @@ public final class PendingPrefabStore {
    * @param data bytes of the {@code .prefab.json}
    * @param adminName username of the approving admin (audit)
    * @param adminUuid uuid of the approving admin (audit)
-   * @throws IOException if the data is missing, rejected by validation, or the write fails
+   * @param maxPerOwner the maximum number of prefabs a single owner may keep (quota)
+   * @throws IOException if the data is missing, rejected by validation, over quota, or the write
+   *     fails
    */
-  public void approve(PendingPrefab p, byte[] data, String adminName, String adminUuid)
+  public void approve(
+      PendingPrefab p, byte[] data, String adminName, String adminUuid, int maxPerOwner)
       throws IOException {
     if (data == null || data.length == 0) {
       throw new IOException("no prefab data (not downloaded?)");
@@ -101,22 +106,14 @@ public final class PendingPrefabStore {
       }
 
       Path liveRoot = PrefabStore.get().getServerPrefabsPath();
-      Path dest = liveRoot.resolve(owner + "_" + base + SUFFIX);
-      Files.createDirectories(dest.getParent());
+      Files.createDirectories(liveRoot);
 
-      Path liveRootReal = liveRoot.toRealPath();
-      Path destParentReal = dest.getParent().toRealPath();
-      if (!destParentReal.startsWith(liveRootReal)) {
-        throw new IOException("invalid destination (outside the prefabs tree)");
-      }
-      String destName = dest.getFileName().toString();
-      if (destName.contains("/") || destName.contains("\\") || destName.contains("..")) {
-        throw new IOException("invalid destination name");
-      }
-      if (Files.isSymbolicLink(dest)) {
-        throw new IOException("destination is a symlink — refused");
+      if (countOwnerPrefabs(liveRoot, owner) >= maxPerOwner) {
+        throw new IOException(
+            "upload quota reached: this player already owns " + maxPerOwner + " prefabs (max)");
       }
 
+      Path dest = resolveUniqueDest(liveRoot, owner, base);
       Files.write(dest, data);
 
       LOG.at(Level.INFO).log(
@@ -152,6 +149,53 @@ public final class PendingPrefabStore {
   }
 
   /**
+   * Counts how many approved prefabs an owner already has in the live tree (files named {@code
+   * <owner>_*<SUFFIX>}).
+   */
+  private static long countOwnerPrefabs(Path liveRoot, String owner) throws IOException {
+    String prefix = owner + "_";
+    try (Stream<Path> files = Files.list(liveRoot)) {
+      return files
+          .filter(Files::isRegularFile)
+          .map(path -> path.getFileName().toString())
+          .filter(name -> name.startsWith(prefix) && name.endsWith(SUFFIX))
+          .count();
+    }
+  }
+
+  /**
+   * Resolves a destination that does not overwrite an existing prefab: {@code
+   * <owner>_<base>.prefab.json}, or {@code <owner>_<base>_N.prefab.json} for the first free {@code
+   * N} when the base name is taken. Re-validates path containment and refuses symlinks.
+   *
+   * @throws IOException if no free name is found, or a containment/symlink check fails
+   */
+  private static Path resolveUniqueDest(Path liveRoot, String owner, String base)
+      throws IOException {
+    Path liveRootReal = liveRoot.toRealPath();
+    String stem = owner + "_" + base;
+    for (int n = 1; n <= MAX_COLLISION_SUFFIX; n++) {
+      String name = (n == 1) ? stem : stem + "_" + n;
+      Path dest = liveRoot.resolve(name + SUFFIX);
+      String destName = dest.getFileName().toString();
+      if (destName.contains("/") || destName.contains("\\") || destName.contains("..")) {
+        throw new IOException("invalid destination name");
+      }
+      if (Files.exists(dest)) {
+        continue;
+      }
+      if (Files.isSymbolicLink(dest)) {
+        throw new IOException("destination is a symlink — refused");
+      }
+      if (!dest.getParent().toRealPath().startsWith(liveRootReal)) {
+        throw new IOException("invalid destination (outside the prefabs tree)");
+      }
+      return dest;
+    }
+    throw new IOException("too many prefabs with a similar name; delete some first");
+  }
+
+  /**
    * Owner subfolder: prefers the Hytale UUID, falls back to the Discord id, otherwise anonymous.
    */
   private static String ownerDir(PendingPrefab p) {
@@ -168,7 +212,9 @@ public final class PendingPrefabStore {
     return "discord_" + (digits.length() <= 8 ? digits : digits.substring(digits.length() - 8));
   }
 
-  /** File base name: charset sanitization, anti path-traversal and collision handling. */
+  /**
+   * File base name: charset sanitization and anti path-traversal (collisions resolved at write).
+   */
   private static String baseName(String rawName) {
     String raw = rawName == null ? "" : rawName;
     String cleaned = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");

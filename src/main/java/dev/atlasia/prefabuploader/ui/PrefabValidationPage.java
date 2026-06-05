@@ -32,28 +32,23 @@ import com.hypixel.hytale.protocol.packets.interface_.EditorBlocksChange;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.asset.type.environment.config.Environment;
 import com.hypixel.hytale.server.core.asset.util.ColorParseUtil;
-import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.prefab.selection.standard.BlockSelection;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.atlasia.prefabuploader.grpc.GetPendingResponse;
 import dev.atlasia.prefabuploader.grpc.ResolvePendingResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
 import dev.atlasia.prefabuploader.service.prefab.PendingPrefab;
-import dev.atlasia.prefabuploader.service.prefab.PendingPrefabStore;
 import dev.atlasia.prefabuploader.service.prefab.PlayerNameCache;
 import dev.atlasia.prefabuploader.service.prefab.PrefabValidator;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -65,10 +60,9 @@ import javax.annotation.Nonnull;
  * from the CDN into memory, validates it ({@link PrefabValidator}) and renders the preview. Only
  * approval writes to disk.
  */
-public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidationPage.Data> {
+public class PrefabValidationPage extends AbstractPrefabPage<PrefabValidationPage.Data> {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final int ROWS = 20;
 
   private static final int PREVIEW_TILT = 23;
   private static final int PREVIEW_SPIN_SPEED = 27;
@@ -104,7 +98,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   private int selectedIndex = -1;
   private List<PendingPrefab> cached;
 
-  private volatile byte[] selectedBytes;
+  private volatile BlockSelection selectedSelection;
 
   private volatile int selectionGen = 0;
 
@@ -181,7 +175,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       return;
     }
     if ("Accept".equals(a)) {
-      handleAccept();
+      handleReview();
       return;
     }
     if ("Delete".equals(a)) {
@@ -196,6 +190,9 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
    */
   private void handleSelect(String action) {
     int rowIdx = parseIdx(action, "Select");
+    if (rowIdx < 0 || rowIdx >= ROWS) {
+      return;
+    }
     List<PendingPrefab> view = filtered();
     int absolute = page * ROWS + rowIdx;
     PendingPrefab chosen = null;
@@ -206,7 +203,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       selectedIndex = -1;
     }
 
-    selectedBytes = null;
+    selectedSelection = null;
     int gen = ++selectionGen;
     refresh();
 
@@ -229,12 +226,11 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
               PrefabValidator.Result result;
               try {
                 GetPendingResponse gp = hubClient.getPending(target.id());
-                bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
-                result = PrefabValidator.validate(bytes);
+                bytes = hubClient.downloadFromCdn(gp.getDownloadUrl(), gp.getSizeBytes());
+                result = PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
               } catch (Throwable t) {
-                LOG.at(Level.WARNING).log(
-                    "[PrefabsUploader] preview download/validate failed (%s): %s",
-                    target.prefabName(), t.getMessage());
+                LOG.at(Level.WARNING).withCause(t).log(
+                    "[PrefabsUploader] preview download/validate failed (%s)", target.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen != selectionGen) {
@@ -260,14 +256,13 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                 return;
               }
 
-              final byte[] okBytes = bytes;
               final BlockSelection sel = result.selection();
               runOnWorld(
                   () -> {
                     if (gen != selectionGen) {
                       return;
                     }
-                    selectedBytes = okBytes;
+                    selectedSelection = sel;
                     sendPreview(target, sel);
                     refresh();
                   });
@@ -275,72 +270,76 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   /**
-   * Approves the selection: native validation plus a write to live storage, then
-   * resolvePending(true) on the hub.
+   * Opens the mandatory block-review step: ensures the prefab is downloaded and validated, then
+   * hands it to {@link PrefabBlockReviewPage} where the admin curates the blocks and approves.
    */
-  private void handleAccept() {
-    PendingPrefab sel = selected();
-    if (sel == null) {
+  private void handleReview() {
+    PendingPrefab pending = selected();
+    if (pending == null) {
       sendUpdate();
       return;
     }
-    final String adminName = playerRef.getUsername();
-    final String adminUuid = String.valueOf(playerRef.getUuid());
+    BlockSelection have = selectedSelection;
+    if (have != null) {
+      runOnWorld(() -> openReview(pending, have));
+      return;
+    }
     final int gen = selectionGen;
-    byte[] have = selectedBytes;
-
     hubClient
         .io()
         .execute(
             () -> {
               try {
-                byte[] bytes = have;
-                if (bytes == null) {
-                  GetPendingResponse gp = hubClient.getPending(sel.id());
-                  bytes = hubClient.downloadFromCdn(gp.getDownloadUrl());
-                  PrefabValidator.Result rv = PrefabValidator.validate(bytes);
-                  if (!rv.ok()) {
-                    throw new IOException(rv.error());
-                  }
+                GetPendingResponse gp = hubClient.getPending(pending.id());
+                byte[] bytes = hubClient.downloadFromCdn(gp.getDownloadUrl(), gp.getSizeBytes());
+                PrefabValidator.Result rv =
+                    PrefabValidator.validate(bytes, hubClient.maxPrefabBytes());
+                if (!rv.ok()) {
+                  throw new IOException(rv.error());
                 }
-                final byte[] finalBytes = bytes;
-
-                runOnWorldAwait(
-                    () -> {
-                      try {
-                        PendingPrefabStore.get().approve(sel, finalBytes, adminName, adminUuid);
-                      } catch (Throwable t) {
-                        throw new RuntimeException(t);
-                      }
-                    });
-
-                ResolvePendingResponse resp = hubClient.resolvePending(sel.id(), true, adminName);
-                if (!resp.getOk() && !resp.getError().isBlank()) {
-                  LOG.at(Level.WARNING).log(
-                      "[PrefabsUploader] resolvePending(approved) returned a hub error: %s",
-                      resp.getError());
-                }
+                final BlockSelection parsed = rv.selection();
                 runOnWorld(
                     () -> {
-                      removeFromList(sel);
-                      deselect();
-                      clearPreview();
-                      sendResult("server.prefabsuploader.ui.approved", sel.prefabName());
-                      refresh();
+                      if (gen != selectionGen) {
+                        return;
+                      }
+                      selectedSelection = parsed;
+                      openReview(pending, parsed);
                     });
               } catch (Throwable t) {
-                final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
-                    "[PrefabsUploader] failed to approve prefab %s", sel.prefabName());
+                    "[PrefabsUploader] failed to load prefab %s for review", pending.prefabName());
                 runOnWorld(
                     () -> {
                       if (gen == selectionGen) {
-                        showDetailValidationFailed(reason);
+                        showDetailError("server.prefabsuploader.ui.errorGeneric");
                       }
-                      sendError(reason);
+                      sendErrorGeneric();
                     });
               }
             });
+  }
+
+  /**
+   * Opens the block-review page for the given prefab and its already-parsed selection. Must run on
+   * the world thread.
+   */
+  private void openReview(PendingPrefab pending, BlockSelection selection) {
+    World w = world();
+    if (w == null) {
+      return;
+    }
+    var store = w.getEntityStore().getStore();
+    Player player = store.getComponent(playerRef.getReference(), Player.getComponentType());
+    if (player == null) {
+      return;
+    }
+    player
+        .getPageManager()
+        .openCustomPage(
+            playerRef.getReference(),
+            store,
+            new PrefabBlockReviewPage(playerRef, hubClient, pending, selection));
   }
 
   /** Rejects the selection via resolvePending(false) on the hub (no disk write). */
@@ -351,7 +350,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       return;
     }
     final String adminName = playerRef.getUsername();
-    selectedBytes = null;
+    selectedSelection = null;
 
     hubClient
         .io()
@@ -373,10 +372,9 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
                       refresh();
                     });
               } catch (Throwable t) {
-                final String reason = causeMessage(t);
                 LOG.at(Level.WARNING).withCause(t).log(
                     "[PrefabsUploader] failed to reject prefab %s", sel.prefabName());
-                runOnWorld(() -> sendError(reason));
+                runOnWorld(this::sendErrorGeneric);
               }
             });
   }
@@ -419,7 +417,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   @Override
   public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
     selectionGen++;
-    selectedBytes = null;
+    selectedSelection = null;
     clearPreview();
   }
 
@@ -439,74 +437,6 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
       defaultWaterTint = null;
     }
     tintsComputed = true;
-  }
-
-  /**
-   * Returns the player's world.
-   *
-   * @return the world, or {@code null} if the player disconnected
-   */
-  private World world() {
-    try {
-      return Universe.get().getWorld(playerRef.getWorldUuid());
-    } catch (Throwable t) {
-      LOG.at(Level.FINE).log("[PrefabsUploader] world unavailable: %s", t.getMessage());
-      return null;
-    }
-  }
-
-  /**
-   * Runs {@code r} on the player's world thread, as required for packet/UI operations.
-   *
-   * @param r the task to run
-   */
-  private void runOnWorld(Runnable r) {
-    World w = world();
-    if (w == null) {
-      return;
-    }
-    w.execute(
-        () -> {
-          try {
-            r.run();
-          } catch (Throwable t) {
-            LOG.at(Level.WARNING).withCause(t).log(
-                "[PrefabsUploader] UI task on the world thread failed");
-          }
-        });
-  }
-
-  /**
-   * Runs {@code r} on the world thread and blocks until it completes, propagating any exception.
-   * Must be called only from the I/O executor, never from the world thread, to avoid deadlock.
-   *
-   * @param r the task to run
-   * @throws Exception if the task fails or the world is unavailable
-   */
-  private void runOnWorldAwait(Runnable r) throws Exception {
-    World w = world();
-    if (w == null) {
-      throw new IOException("world unavailable");
-    }
-    CompletableFuture<Void> done = new CompletableFuture<>();
-    w.execute(
-        () -> {
-          try {
-            r.run();
-            done.complete(null);
-          } catch (Throwable t) {
-            done.completeExceptionally(t);
-          }
-        });
-    try {
-      done.get(20, TimeUnit.SECONDS);
-    } catch (ExecutionException ee) {
-      Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
-      if (cause instanceof Exception ex) {
-        throw ex;
-      }
-      throw new IOException(cause.getMessage(), cause);
-    }
   }
 
   private List<PendingPrefab> filtered() {
@@ -529,7 +459,7 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   private void deselect() {
     selectedIndex = -1;
     selectionGen++;
-    selectedBytes = null;
+    selectedSelection = null;
   }
 
   /** Removes a pending prefab from the local list after approval or rejection. */
@@ -608,27 +538,12 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
   }
 
   private void sendResult(String i18nKey, String prefabName) {
-    playerRef.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] "),
-            Message.translation(i18nKey).param("name", sanitize(prefabName))));
+    playerRef.sendMessage(tagged(Message.translation(i18nKey).param("name", sanitize(prefabName))));
   }
 
-  private void sendError(String reason) {
-    playerRef.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] "),
-            Message.translation("server.prefabsuploader.ui.error")
-                .param("error", sanitize(String.valueOf(reason)))));
-  }
-
-  private static String causeMessage(Throwable t) {
-    Throwable c = t;
-    if (c instanceof RuntimeException && c.getCause() != null) {
-      c = c.getCause();
-    }
-    String msg = c.getMessage();
-    return (msg == null || msg.isBlank()) ? c.getClass().getSimpleName() : msg;
+  /** Sends a generic chat error so raw exception text never reaches the client. */
+  private void sendErrorGeneric() {
+    playerRef.sendMessage(tagged(Message.translation("server.prefabsuploader.ui.errorGeneric")));
   }
 
   /**
@@ -658,44 +573,5 @@ public class PrefabValidationPage extends InteractiveCustomUIPage<PrefabValidati
           .param("discord", sanitize(dc));
     }
     return Message.raw(sanitize(p.playerUuid()));
-  }
-
-  private static int parseIdx(String action, String prefix) {
-    try {
-      return Integer.parseInt(action.substring(prefix.length()));
-    } catch (NumberFormatException e) {
-      return -1;
-    }
-  }
-
-  /**
-   * Strips Unicode control and formatting characters (C0 controls, DEL, bidi overrides, zero-width)
-   * from player-supplied strings before display, preventing layout/RTL spoofing in the UI.
-   *
-   * @param s the input string
-   * @return the sanitized string, or an empty string if {@code s} is null or empty
-   */
-  private static String sanitize(String s) {
-    if (s == null || s.isEmpty()) {
-      return "";
-    }
-    StringBuilder sb = new StringBuilder(s.length());
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      boolean drop =
-          c < 0x20
-              || c == 0x7F
-              || (c >= 0x202A && c <= 0x202E)
-              || (c >= 0x2066 && c <= 0x2069)
-              || c == 0x200B
-              || c == 0x200C
-              || c == 0x200D
-              || c == 0x2060
-              || c == 0xFEFF;
-      if (!drop) {
-        sb.append(c);
-      }
-    }
-    return sb.toString();
   }
 }

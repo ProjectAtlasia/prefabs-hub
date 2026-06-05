@@ -26,7 +26,7 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.atlasia.prefabuploader.grpc.SetupResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
@@ -39,66 +39,81 @@ import javax.annotation.Nullable;
 public class ConfigSetupCommand extends AbstractCommand {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
-  private static final Color CODE = new Color(0x66, 0xDD, 0x77);
-  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
 
   private final Client client;
 
   public ConfigSetupCommand(@Nonnull Client client) {
     super("setup", "server.prefabsuploader.command.config.setup.description");
     this.client = client;
-    requirePermission("projectatlasia.prefabsuploader.command.prefabsuploader.config.setup");
+    requirePermission("projectatlasia.prefabsuploader.command.config.setup");
   }
 
   @Nullable
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext context) {
-    String requestedBy =
-        context.isPlayer() ? context.senderAs(PlayerRef.class).getUsername() : "console";
+    PlayerRef admin = context.isPlayer() ? context.senderAs(PlayerRef.class) : null;
+    String requestedBy = admin != null ? admin.getUsername() : "console";
     context.sendMessage(
-        Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
-            Message.translation("server.prefabsuploader.config.setup.generating")));
+        Messages.tagged(Message.translation("server.prefabsuploader.config.setup.generating")));
 
     return CompletableFuture.runAsync(
         () -> {
           try {
             SetupResponse res = client.requestSetup(requestedBy);
-            context.sendMessage(
+            sendReply(
+                context,
+                admin,
                 Message.join(
-                    Message.raw("[PrefabsUploader] ").color(TAG),
+                    Message.raw("[PrefabsUploader] ").color(Messages.TAG),
                     Message.translation("server.prefabsuploader.config.setup.pairingCode"),
                     Message.raw(" "),
                     Message.translation("server.prefabsuploader.config.setup.pairingCode.value")
                         .param("code", res.getPairingCode())
-                        .color(CODE)));
+                        .color(Messages.CODE)));
             if (!res.getBotInviteUrl().isEmpty()) {
-              context.sendMessage(
+              sendReply(
+                  context,
+                  admin,
                   Message.join(
                       Message.translation("server.prefabsuploader.config.setup.step1"),
                       Message.raw(" "),
                       Message.translation("server.prefabsuploader.config.setup.step1.button")
-                          .color(DISCORD)
+                          .color(Messages.DISCORD)
                           .link(res.getBotInviteUrl())));
             }
-            context.sendMessage(
+            sendReply(
+                context,
+                admin,
                 Message.join(
                     Message.translation("server.prefabsuploader.config.setup.step2"),
                     Message.raw(" "),
                     Message.translation("server.prefabsuploader.config.setup.step2.command")
                         .param("code", res.getPairingCode())
-                        .color(CODE)));
-            context.sendMessage(Message.translation("server.prefabsuploader.config.setup.expires"));
+                        .color(Messages.CODE)));
+            sendReply(
+                context, admin, Message.translation("server.prefabsuploader.config.setup.expires"));
             openSetupWindow(context);
           } catch (Throwable t) {
             LOG.at(Level.WARNING).log("[PrefabsUploader] requestSetup failed: %s", t.getMessage());
-            context.sendMessage(
-                Message.join(
-                    Message.raw("[PrefabsUploader] ").color(TAG),
+            sendReply(
+                context,
+                admin,
+                Messages.tagged(
                     Message.translation("server.prefabsuploader.config.setup.hubError")));
           }
         });
+  }
+
+  /**
+   * Replies to the command sender from a background thread: marshals to the world thread for
+   * players and falls back to a direct console reply otherwise.
+   */
+  private static void sendReply(CommandContext context, @Nullable PlayerRef admin, Message msg) {
+    if (admin != null) {
+      sendInGame(admin, msg);
+    } else {
+      context.sendMessage(msg);
+    }
   }
 
   /** Opens a 3-min window that confirms the pairing in-game when the hub reports configured. */
@@ -114,8 +129,7 @@ public class ConfigSetupCommand extends AbstractCommand {
               window.close();
               sendInGame(
                   admin,
-                  Message.join(
-                      Message.raw("[PrefabsUploader] ").color(TAG),
+                  Messages.tagged(
                       Message.translation("server.prefabsuploader.config.setup.paired")));
             });
     window.onExpire(dereg);

@@ -1,8 +1,9 @@
 name: validate
 
-# PR gate for develop -> master: builds the jar and runs the scanners. When these checks pass
-# (enforce via branch protection on master), the PR can be merged; the push to master then runs
-# release.yml (publish gated by manual approval). Also runs on develop pushes for early feedback.
+# Validation workflow (PR/build gate). Builds the jar and runs the security scanners on PRs into
+# master and on develop pushes (early feedback). When these checks pass (enforce via branch
+# protection on master), the PR can be merged; the push to master then triggers release-please.yml,
+# whose publish step is gated by manual approval. This workflow does not publish anything.
 on:
   pull_request:
     branches: [master]
@@ -34,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1 (SHA-pinned)
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
@@ -62,7 +63,7 @@ jobs:
       - name: Build fat jar (bundles deps so Dependency-Check can scan them)
         run: ./gradlew shadowJar --no-daemon
       - name: Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@75ba02d6183445fe0761d26e836bde58b1560600 # 1.1.0 (SHA-pinned)
         env:
           # setup-java sets JAVA_HOME to a host path that doesn't exist inside the action's
           # container. Per the action's README, point it at the JDK bundled in the Depcheck image.
@@ -79,8 +80,12 @@ jobs:
           args: >-
             --failOnCVSS 8 --disableCentral
             ${{ secrets.NVD_API_KEY != '' && format('--nvdApiKey {0}', secrets.NVD_API_KEY) || '' }}
+      # Dependency-Check may abort before writing the SARIF (e.g. an NVD update failure), so this
+      # upload tolerates errors while still running when the file IS present even if a prior step
+      # failed (if: always()).
       - name: Upload Dependency-Check SARIF
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/dependency-check-report.sarif

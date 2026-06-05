@@ -20,10 +20,14 @@ package dev.atlasia.prefabuploader.service.broadcast;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
+import com.hypixel.hytale.server.core.universe.world.World;
 import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.service.hub.Client;
-import java.awt.Color;
+import dev.atlasia.prefabuploader.util.Messages;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 
 /**
@@ -34,9 +38,8 @@ public final class SetupBroadcaster {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
   private static final long INTERVAL_MS = 60_000;
-
-  private static final Color TAG = new Color(0xFF, 0xAA, 0x00);
-  private static final Color DISCORD = new Color(0x72, 0x89, 0xDA);
+  private static final String SETUP_PERMISSION =
+      "projectatlasia.prefabsuploader.command.config.setup";
 
   private final Client client;
   private final PluginConfig config;
@@ -68,11 +71,7 @@ public final class SetupBroadcaster {
                   if (client.isConfigured()) {
                     continue;
                   }
-                  if (Universe.get().getPlayerCount() == 0) {
-                    continue;
-                  }
-                  Universe.get().sendMessage(buildMessage());
-                  LOG.at(Level.INFO).log("[PrefabsUploader] setup broadcast sent");
+                  broadcastToAdmins();
                 } catch (InterruptedException e) {
                   Thread.currentThread().interrupt();
                   break;
@@ -89,11 +88,39 @@ public final class SetupBroadcaster {
         "[PrefabsUploader] broadcaster started (interval %ds)", INTERVAL_MS / 1000);
   }
 
+  /**
+   * Sends the setup reminder only to online admins (holders of {@link #SETUP_PERMISSION}), each on
+   * its own world thread so the chat packets never race the world loop. Players whose world cannot
+   * be resolved are skipped. Runs off the world thread (the player snapshot is copied defensively).
+   */
+  private void broadcastToAdmins() {
+    Universe universe = Universe.get();
+    List<PlayerRef> players = new ArrayList<>(universe.getPlayers());
+    if (players.isEmpty()) {
+      return;
+    }
+    Message message = buildMessage();
+    for (PlayerRef player : players) {
+      World world = universe.getWorld(player.getWorldUuid());
+      if (world == null) {
+        continue;
+      }
+      world.execute(
+          () -> {
+            if (player.hasPermission(SETUP_PERMISSION)) {
+              player.sendMessage(message);
+            }
+          });
+    }
+    LOG.at(Level.FINE).log(
+        "[PrefabsUploader] setup reminder dispatched to admins (%d online)", players.size());
+  }
+
   private Message buildMessage() {
     String url = client.inviteUrl();
     Message base =
         Message.join(
-            Message.raw("[PrefabsUploader] ").color(TAG),
+            Message.raw("[PrefabsUploader] ").color(Messages.TAG),
             Message.translation("server.prefabsuploader.broadcast.setup.prefix"),
             Message.raw(" "));
     if (url == null || url.isEmpty()) {
@@ -105,7 +132,7 @@ public final class SetupBroadcaster {
         Message.translation("server.prefabsuploader.broadcast.setup.installPrompt"),
         Message.raw(" "),
         Message.translation("server.prefabsuploader.broadcast.setup.installButton")
-            .color(DISCORD)
+            .color(Messages.DISCORD)
             .link(url));
   }
 

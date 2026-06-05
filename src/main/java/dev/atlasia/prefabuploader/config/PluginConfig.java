@@ -38,14 +38,19 @@ import java.util.logging.Level;
 public final class PluginConfig {
 
   private static final HytaleLogger LOG = HytaleLogger.forEnclosingClass();
-  public static final String PLUGIN_VERSION = "0.1.0";
+
+  /** Plugin version, sourced at build time from the Gradle project version (single source). */
+  public static final String PLUGIN_VERSION;
 
   private static final String DEFAULT_HUB;
   private static final boolean DEFAULT_TLS;
+  private static final boolean DEFAULT_ALLOW_INSECURE;
 
   static {
     String hub = "localhost:50051";
     boolean tls = false;
+    boolean allowInsecure = false;
+    String version = "0.0.0";
     try (InputStream in =
         PluginConfig.class.getResourceAsStream("/prefabsuploader-build.properties")) {
       if (in != null) {
@@ -53,13 +58,27 @@ public final class PluginConfig {
         p.load(in);
         hub = p.getProperty("hub.default", hub);
         tls = Boolean.parseBoolean(p.getProperty("hub.tls", String.valueOf(tls)));
+        allowInsecure =
+            Boolean.parseBoolean(
+                p.getProperty("hub.insecure.allowed", String.valueOf(allowInsecure)));
+        version = p.getProperty("version", version);
       }
     } catch (IOException e) {
       LOG.at(Level.FINE).log("[PrefabsUploader] build defaults unavailable: %s", e.getMessage());
     }
     DEFAULT_HUB = hub;
     DEFAULT_TLS = tls;
+    DEFAULT_ALLOW_INSECURE = allowInsecure;
+    PLUGIN_VERSION = version;
   }
+
+  private static final int DEFAULT_MAX_PREFAB_MB = 8;
+  private static final int MIN_MAX_PREFAB_MB = 1;
+  private static final int MAX_MAX_PREFAB_MB = 64;
+
+  private static final int DEFAULT_MAX_PER_PLAYER = 25;
+  private static final int MIN_MAX_PER_PLAYER = 1;
+  private static final int MAX_MAX_PER_PLAYER = 1000;
 
   private static final String DOC_MARKER = "# PrefabsUploader config";
 
@@ -69,6 +88,8 @@ public final class PluginConfig {
   private String hubAddress;
   private boolean hubTls;
   private boolean hubInsecure;
+  private int maxPrefabBytes;
+  private int maxPrefabsPerPlayer;
   private String authToken;
   private boolean pairMessage;
   private String inviteUrl;
@@ -91,17 +112,28 @@ public final class PluginConfig {
     Path source = newExists ? file : (migrate ? legacy : null);
 
     boolean documented = false;
+    boolean loadFailed = false;
     if (source != null) {
       Properties props = new Properties();
       try (InputStream in = Files.newInputStream(source)) {
         props.load(in);
       } catch (IOException e) {
-        LOG.at(Level.WARNING).log("[PrefabsUploader] failed to read config: %s", e.getMessage());
+        loadFailed = true;
+        LOG.at(Level.SEVERE).withCause(e).log(
+            "[PrefabsUploader] failed to read existing config %s; keeping identity intact and"
+                + " skipping rewrite this run",
+            source);
       }
       serverId = props.getProperty("server.id", "");
       hubAddress = props.getProperty("hub.address", DEFAULT_HUB);
       hubTls = Boolean.parseBoolean(props.getProperty("hub.tls", String.valueOf(DEFAULT_TLS)));
       hubInsecure = Boolean.parseBoolean(props.getProperty("hub.insecure", "false"));
+      maxPrefabBytes =
+          parseMaxPrefabBytes(
+              props.getProperty("prefab.max.size.mb", String.valueOf(DEFAULT_MAX_PREFAB_MB)));
+      maxPrefabsPerPlayer =
+          parseMaxPerPlayer(
+              props.getProperty("prefab.max.per.player", String.valueOf(DEFAULT_MAX_PER_PLAYER)));
       authToken = props.getProperty("auth.token", "");
       pairMessage = Boolean.parseBoolean(props.getProperty("pair.message", "true"));
       inviteUrl = props.getProperty("discord.invite.url", "");
@@ -111,9 +143,15 @@ public final class PluginConfig {
       hubAddress = DEFAULT_HUB;
       hubTls = DEFAULT_TLS;
       hubInsecure = false;
+      maxPrefabBytes = DEFAULT_MAX_PREFAB_MB << 20;
+      maxPrefabsPerPlayer = DEFAULT_MAX_PER_PLAYER;
       authToken = "";
       pairMessage = true;
       inviteUrl = "";
+    }
+
+    if (loadFailed) {
+      return;
     }
 
     boolean fresh = serverId == null || serverId.isEmpty();
@@ -139,6 +177,42 @@ public final class PluginConfig {
     } catch (IOException e) {
       return false;
     }
+  }
+
+  /** Parses the configured max prefab size (in MB), clamped, and converts it to bytes. */
+  private static int parseMaxPrefabBytes(String rawMb) {
+    return parseClampedInt(
+            rawMb,
+            "prefab.max.size.mb",
+            DEFAULT_MAX_PREFAB_MB,
+            MIN_MAX_PREFAB_MB,
+            MAX_MAX_PREFAB_MB)
+        << 20;
+  }
+
+  /** Parses the configured per-player prefab quota, clamped to {@code [MIN..MAX]}. */
+  private static int parseMaxPerPlayer(String raw) {
+    return parseClampedInt(
+        raw,
+        "prefab.max.per.player",
+        DEFAULT_MAX_PER_PLAYER,
+        MIN_MAX_PER_PLAYER,
+        MAX_MAX_PER_PLAYER);
+  }
+
+  /**
+   * Parses an integer config value, clamping to {@code [min..max]} and falling back to {@code def}
+   * (with a warning) on a malformed value.
+   */
+  private static int parseClampedInt(String raw, String key, int def, int min, int max) {
+    int v;
+    try {
+      v = Integer.parseInt(raw.trim());
+    } catch (NumberFormatException e) {
+      LOG.at(Level.WARNING).log("[PrefabsUploader] invalid %s='%s'; using default", key, raw);
+      v = def;
+    }
+    return Math.max(min, Math.min(max, v));
   }
 
   /** Writes the commented config file from the current values (atomic write, 0600 permissions). */
@@ -180,10 +254,18 @@ public final class PluginConfig {
     b.append("hub.tls=").append(hubTls).append('\n');
     b.append("\n");
     b.append(
-        "# hub.insecure=true: connects via TLS but does NOT validate the certificate (DEV only,\n");
+        "# hub.insecure=true: connects via TLS but does NOT validate the certificate (DEV builds\n");
     b.append(
-        "# with a self-signed/broken cert). Keep false in production. Only applies if hub.tls=true.\n");
+        "# only -- official/release builds ignore this and always validate). Needs hub.tls=true.\n");
     b.append("hub.insecure=").append(hubInsecure).append('\n');
+    b.append("\n");
+    b.append("# Max size (in MB) of a prefab a player may upload; anything larger is rejected.\n");
+    b.append("# Clamped to [1..64]. Default 8.\n");
+    b.append("prefab.max.size.mb=").append(maxPrefabBytes >> 20).append('\n');
+    b.append("\n");
+    b.append("# Max number of approved prefabs a single player may own; further approvals are\n");
+    b.append("# rejected until they delete some. Clamped to [1..1000]. Default 25.\n");
+    b.append("prefab.max.per.player=").append(maxPrefabsPerPlayer).append('\n');
     b.append("\n");
     b.append("# pair.message=false turns off the automatic chat prompt to pair the server.\n");
     b.append("# The commands keep working normally (it only silences the broadcast).\n");
@@ -218,6 +300,26 @@ public final class PluginConfig {
 
   public boolean hubInsecure() {
     return hubInsecure;
+  }
+
+  /**
+   * Whether this build permits disabling TLS certificate validation ({@code hub.insecure=true}).
+   * Baked at build time: dev builds allow it for local testing against a self-signed hub, while
+   * official/release builds set it to {@code false} so the shipped jar always validates the hub
+   * certificate, regardless of {@code config.properties}.
+   */
+  public boolean insecureTlsAllowed() {
+    return DEFAULT_ALLOW_INSECURE;
+  }
+
+  /** Maximum prefab upload size in bytes, configured by the server owner. */
+  public int maxPrefabBytes() {
+    return maxPrefabBytes;
+  }
+
+  /** Maximum number of approved prefabs a single player may own, configured by the server owner. */
+  public int maxPrefabsPerPlayer() {
+    return maxPrefabsPerPlayer;
   }
 
   public String authToken() {

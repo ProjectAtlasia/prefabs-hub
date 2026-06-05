@@ -34,8 +34,6 @@ service PrefabsUploader {
 message PluginMessage {
   oneof payload {
     Register register = 1;
-    Heartbeat heartbeat = 2;
-    PrefabAck prefab_ack = 3;
   }
 }
 
@@ -48,23 +46,9 @@ message Register {
   string auth_token = 3;
 }
 
-message Heartbeat {
-  int64 timestamp_ms = 1;
-}
-
-// Result of a PrefabPush, correlated by transfer_id.
-message PrefabAck {
-  string transfer_id = 1;
-  string prefab_name = 2;
-  bool ok = 3;
-  // Reason when ok=false.
-  string error = 4;
-}
-
 message HubMessage {
   oneof payload {
     ConfigState config_state = 1;
-    PrefabPush prefab_push = 2;
     PlayerLinked player_linked = 3;
   }
 }
@@ -89,21 +73,6 @@ message ConfigState {
   string auth_token = 6;
   // Owner-configured Discord guild invite (for the in-game broadcast / join prompts); may be empty.
   string guild_invite_url = 7;
-}
-
-// A prefab uploaded via Discord, pushed to the plugin.
-message PrefabPush {
-  string transfer_id = 1;
-  // Name requested by the uploader; the plugin sanitizes and namespaces it before saving.
-  string prefab_name = 2;
-  bytes data = 3;
-  string uploader_discord_id = 4;
-  string uploader_name = 5;
-  int64 size_bytes = 6;
-  // Owner Hytale UUID when the upload came from a linked thread; empty for direct uploads.
-  string player_uuid = 7;
-  // Owner in-game name from the link; empty for direct uploads.
-  string player_name = 8;
 }
 
 message SetupRequest {
