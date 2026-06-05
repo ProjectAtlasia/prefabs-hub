@@ -15,7 +15,9 @@ plugins {
 val grpcVersion = "1.71.0"
 val protobufVersion = "4.29.3"
 
-version = "0.2.2" // x-release-please-version
+// Version comes from the release tag: CI passes -PreleaseVersion (semantic-release computes it from
+// the conventional commits); local builds default to a dev placeholder. Never committed → no drift.
+version = (findProperty("releaseVersion") as String?)?.takeIf { it.isNotBlank() } ?: "0.0.0-dev"
 
 // Timestamp embedded in the jar file name. CI passes -PbuildTime; locally it is computed (UTC).
 val buildTime =
