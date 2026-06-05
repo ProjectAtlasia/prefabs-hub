@@ -2,7 +2,7 @@ name: release-please
 
 # Conventional-commit driven releases. Triggered by pushes to master, where release-please operates
 # (target-branch). It maintains a Release PR against master that bumps the version across
-# build.gradle.kts, settings.gradle.kts and PluginConfig; merging it creates the tag + GitHub
+# build.gradle.kts and settings.gradle.kts; merging it creates the tag + GitHub
 # release, and the publish job builds the jar (from the tag), attaches it and publishes to CurseForge.
 on:
   push:
