@@ -107,12 +107,14 @@ public final class PrefabBlockManifest {
   /** Builds the manifest entry for a fluid id, resolving its registry name. */
   private static Entry fluidEntry(int id, int count) {
     String name =
-        lookup(
-            id,
-            () -> {
-              Fluid fluid = Fluid.getAssetMap().getAsset(id);
-              return fluid == null ? null : fluid.getId();
-            });
+        id == Fluid.UNKNOWN_ID
+            ? null
+            : lookup(
+                id,
+                () -> {
+                  Fluid fluid = Fluid.getAssetMap().getAsset(id);
+                  return fluid == null ? null : fluid.getId();
+                });
     return entry(id, count, true, name);
   }
 

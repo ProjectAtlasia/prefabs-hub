@@ -41,8 +41,13 @@ public final class PrefabBlockFilter {
    * {@code allowedFluidIds} is dropped. World thread only.
    *
    * <p>The input selection is never mutated: a fresh selection is rebuilt from empty, its
-   * properties and bounds copied over, and only the permitted cells re-added. Entities are
-   * intentionally not copied — the plugin rejects entity-bearing prefabs.
+   * properties and bounds copied over ({@code copyPropertiesFrom} already copies the min/max
+   * bounds), and only the permitted cells re-added. Entities are intentionally not copied — the
+   * plugin rejects entity-bearing prefabs.
+   *
+   * <p>Per-block component/holder state (the {@code ChunkStore} holder a cell may carry) is
+   * intentionally dropped: only id, rotation, filler and support value are re-added, so this is a
+   * deliberate sanitization step and must not be "restored" later.
    *
    * @param sel the source selection to filter
    * @param allowedBlockIds the set of block ids permitted to survive
@@ -53,9 +58,6 @@ public final class PrefabBlockFilter {
       BlockSelection sel, Set<Integer> allowedBlockIds, Set<Integer> allowedFluidIds) {
     BlockSelection out = new BlockSelection(sel.getBlockCount(), 0);
     out.copyPropertiesFrom(sel);
-    if (sel.hasSelectionBounds()) {
-      out.setSelectionArea(sel.getSelectionMin(), sel.getSelectionMax());
-    }
 
     sel.forEachBlock(
         (x, y, z, h) -> {
