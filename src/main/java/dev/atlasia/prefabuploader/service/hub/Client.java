@@ -521,6 +521,19 @@ public final class Client {
   }
 
   /**
+   * Runs a hub-callback continuation on the I/O executor so a slow or blocking waiter never stalls
+   * the single gRPC read loop that serves every stream subscriber. Skipped silently during
+   * shutdown.
+   */
+  private void dispatchToIo(Runnable r) {
+    try {
+      ioExecutor.execute(r);
+    } catch (RejectedExecutionException e) {
+      LOG.at(Level.FINE).log("[PrefabsUploader] hub callback dispatch skipped (shutting down)");
+    }
+  }
+
+  /**
    * Registers a one-shot setup waiter, fired when a {@link ConfigState} with {@code
    * configured=true} arrives on the stream. The caller is responsible for opening the window. The
    * waiter removes itself on fire.
@@ -655,7 +668,8 @@ public final class Client {
   /**
    * Downloads the {@code .prefab.json} directly from the Discord CDN (HTTP GET on the URL returned
    * by {@link #getPending}). Blocking — run off the world thread (use {@link #io()}). Reads in a
-   * streaming fashion and aborts if the body exceeds the owner-configured max prefab size.
+   * streaming fashion and aborts if the body exceeds the owner-configured max prefab size. The
+   * declared size is treated as unknown, so no hub/actual cross-check is performed.
    *
    * @param url the HTTPS download URL
    * @return the downloaded bytes
@@ -664,6 +678,38 @@ public final class Client {
    * @throws InterruptedException if the operation is interrupted
    */
   public byte[] downloadFromCdn(String url) throws IOException, InterruptedException {
+    return downloadFromCdn(url, 0L);
+  }
+
+  /**
+   * Downloads the {@code .prefab.json} directly from the Discord CDN, cross-checking against the
+   * hub-declared size ({@link GetPendingResponse#getSizeBytes()}). Blocking — run off the world
+   * thread (use {@link #io()}). Reads in a streaming fashion and aborts if the body exceeds the
+   * owner-configured max prefab size.
+   *
+   * <p>When {@code declaredSize} is positive it is used to: (1) reject before downloading if it
+   * already exceeds the configured cap, avoiding a body the cap would reject anyway; and (2) emit a
+   * warning after download if the actual byte count differs from it. A {@code declaredSize} of
+   * {@code 0} (or negative) is treated as unknown and skips both cross-checks. The hard cap in
+   * {@link #readCapped} always applies regardless of the declared size.
+   *
+   * @param url the HTTPS download URL
+   * @param declaredSize the hub-declared body size in bytes, or {@code 0} when unknown
+   * @return the downloaded bytes
+   * @throws IOException if the URL is invalid/insecure, the declared size exceeds the cap, the
+   *     status is non-2xx, the body exceeds the cap, or a network failure occurs
+   * @throws InterruptedException if the operation is interrupted
+   */
+  public byte[] downloadFromCdn(String url, long declaredSize)
+      throws IOException, InterruptedException {
+    int cap = config.maxPrefabBytes();
+    if (declaredSize > 0 && declaredSize > cap) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] skipping download: hub-declared size %d bytes exceeds the cap of %d"
+              + " bytes",
+          declaredSize, cap);
+      throw new IOException("prefab exceeds the size limit (" + (cap >> 20) + " MiB)");
+    }
     URI uri = requireHttpsUri(url);
     HttpResponse<InputStream> resp =
         httpClient()
@@ -675,9 +721,16 @@ public final class Client {
       closeQuietly(resp.body());
       throw new IOException("download failed (HTTP " + status + ")");
     }
+    byte[] body;
     try (InputStream in = resp.body()) {
-      return readCapped(in, config.maxPrefabBytes());
+      body = readCapped(in, cap);
     }
+    if (declaredSize > 0 && body.length != declaredSize) {
+      LOG.at(Level.WARNING).log(
+          "[PrefabsUploader] downloaded size mismatch: hub declared %d bytes, actual %d bytes",
+          declaredSize, body.length);
+    }
+    return body;
   }
 
   /**
@@ -825,14 +878,18 @@ public final class Client {
         "[PrefabsUploader] config updated: configured=%s guild=%s",
         cs.getConfigured(), cs.getGuildId());
     // Boot/state waiters fire on every ConfigState; configured waiters only when configured=true.
-    for (Runnable w : new ArrayList<>(stateWaiters)) {
-      runSafe(w);
-    }
-    if (cs.getConfigured()) {
-      for (Runnable w : new ArrayList<>(configuredWaiters)) {
-        runSafe(w);
-      }
-    }
+    List<Runnable> stateSnapshot = new ArrayList<>(stateWaiters);
+    List<Runnable> configuredSnapshot =
+        cs.getConfigured() ? new ArrayList<>(configuredWaiters) : List.of();
+    dispatchToIo(
+        () -> {
+          for (Runnable w : stateSnapshot) {
+            runSafe(w);
+          }
+          for (Runnable w : configuredSnapshot) {
+            runSafe(w);
+          }
+        });
   }
 
   /**
@@ -876,8 +933,11 @@ public final class Client {
         "[PrefabsUploader] player linked: uuid=%s discord=%s",
         pl.getPlayerUuid(), pl.getDiscordName());
     List<Consumer<PlayerLinked>> snapshot = new ArrayList<>(linkWaiters);
-    for (Consumer<PlayerLinked> w : snapshot) {
-      w.accept(pl);
-    }
+    dispatchToIo(
+        () -> {
+          for (Consumer<PlayerLinked> w : snapshot) {
+            runSafe(() -> w.accept(pl));
+          }
+        });
   }
 }
