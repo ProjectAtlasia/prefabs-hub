@@ -27,6 +27,7 @@ import dev.atlasia.prefabuploader.config.PluginConfig;
 import dev.atlasia.prefabuploader.grpc.PlayerImportResponse;
 import dev.atlasia.prefabuploader.service.hub.Client;
 import dev.atlasia.prefabuploader.util.Messages;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 /**
@@ -59,7 +60,8 @@ public final class LinkFlow {
    */
   public void start(
       CommandContext context, PlayerRef sender, String uuid, PlayerImportResponse res) {
-    context.sendMessage(
+    sendInGame(
+        sender,
         Message.join(
             Message.raw("[PrefabsUploader] ").color(Messages.TAG),
             Message.translation("server.prefabsuploader.link.needsLink"),
@@ -69,7 +71,8 @@ public final class LinkFlow {
                 .color(Messages.CODE)));
     String invite = inviteUrl(res);
     if (!invite.isEmpty()) {
-      context.sendMessage(
+      sendInGame(
+          sender,
           Message.join(
               Message.translation("server.prefabsuploader.link.invitePrompt"),
               Message.raw(" "),
@@ -77,14 +80,17 @@ public final class LinkFlow {
                   .color(Messages.DISCORD)
                   .link(invite)));
     }
-    context.sendMessage(
-        Messages.tagged(Message.translation("server.prefabsuploader.link.waiting")));
+    sendInGame(sender, Messages.tagged(Message.translation("server.prefabsuploader.link.waiting")));
 
+    AtomicBoolean settled = new AtomicBoolean(false);
     Client.Window window = client.openWindow(WINDOW_SEC);
     Runnable dereg =
         client.awaitPlayerLinked(
             uuid,
             linked -> {
+              if (!settled.compareAndSet(false, true)) {
+                return;
+              }
               window.close();
               sendInGame(
                   sender,
@@ -94,6 +100,9 @@ public final class LinkFlow {
             });
     window.onExpire(
         () -> {
+          if (!settled.compareAndSet(false, true)) {
+            return;
+          }
           dereg.run();
           sendInGame(
               sender, Messages.tagged(Message.translation("server.prefabsuploader.link.expired")));
