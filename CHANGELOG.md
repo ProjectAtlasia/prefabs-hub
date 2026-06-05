@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/ProjectAtlasia/prefabs-hub/compare/v0.2.1...v0.2.2) (2026-06-05)
+
+
+### Bug Fixes
+
+* produce a valid plugin manifest in the release jar ([658cbe2](https://github.com/ProjectAtlasia/prefabs-hub/commit/658cbe20a574aeed6fb5905721d33f1c8d131632))
+
 ## [0.2.1](https://github.com/ProjectAtlasia/prefabs-hub/compare/v0.2.0...v0.2.1) (2026-06-05)
 
 
