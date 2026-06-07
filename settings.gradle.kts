@@ -33,6 +33,7 @@ hytale {
         Group = "ProjectAtlasia"
         Name = "PrefabsUploader"
         Main = "dev.atlasia.prefabuploader.PrefabsUploaderPlugin"
+        ServerVersion = ">=0.5.0 <0.6.0"
         Version = pluginVersion
         Description = "Envio de prefabs locais pro servidor via integração com Discord (gRPC)."
         Authors = listOf(HytaleManifest.Author("astahjmo (Astaroth)", "contato@johnatan.dev", ""))
