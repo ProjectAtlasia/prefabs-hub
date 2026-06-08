@@ -42,6 +42,7 @@ proto/Makefile
 docs/SECURITY-AUDIT.md
 docs/HYTALE-PREFAB-API.md
 docs/HYTALE-PREFAB-PIPELINE.md
+docs/PREFABS-SUITE.md
 # Diretrizes internas de dev — não fazem parte do artefato open-source
 CLAUDE.md
 
