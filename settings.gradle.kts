@@ -21,7 +21,7 @@ val pluginVersion =
 
 hytale {
     usePatchline("release")
-    useVersion("0.5.2")
+    useVersion("0.5.4")
 
     repositories {
     }
